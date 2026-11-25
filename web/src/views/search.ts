@@ -1,85 +1,82 @@
 import { api } from '../api';
-import { esc, icon } from '../ui';
+import { postRowHTML } from '../components';
+import { esc, icon, toast } from '../ui';
 import type { ViewCtx } from '../types';
 
-/** 全局搜索：说说 / 日志 / 相册 / 人。 */
-export async function renderSearch(outlet: HTMLElement, ctx: ViewCtx): Promise<void> {
+/** 全站搜索：文章 / 用户 / 相册。 */
+export async function renderSearch(root: HTMLElement, ctx: ViewCtx): Promise<void> {
   const q = (ctx.params.q || '').trim();
 
-  outlet.innerHTML = `
-    <section class="card module-head">
+  root.innerHTML = `<div class="page">
+    <header class="page-head">
       <div>
-        <h2 class="module-title">${icon('search', 18)} 搜索</h2>
-        <p class="module-sub">${q ? `“${esc(q)}” 的搜索结果` : '输入关键词，搜索说说、日志、相册和好友'}</p>
+        <p class="page-eyebrow">SEARCH</p>
+        <h1>搜索</h1>
+        <p class="page-sub">${q ? `“${esc(q)}” 的结果` : '找文章、找朋友、找相册'}</p>
       </div>
-    </section>
-    <form class="card search-bar" id="search-form">
-      <input class="input" name="q" value="${esc(q)}" placeholder="搜索关键词" autofocus>
-      <button class="btn btn-primary" type="submit">搜索</button>
-    </form>
-    <div id="search-result"></div>`;
+    </header>
 
-  outlet.querySelector<HTMLFormElement>('#search-form')!.addEventListener('submit', (e) => {
+    <form class="search-box card" id="search-form">
+      <input class="input" name="q" value="${esc(q)}" placeholder="输入关键词" autofocus>
+      <button class="btn btn-primary" type="submit">${icon('search', 14)} 搜索</button>
+    </form>
+
+    <div id="search-result"></div>
+  </div>`;
+
+  root.querySelector<HTMLFormElement>('#search-form')!.addEventListener('submit', (e) => {
     e.preventDefault();
-    const v = (new FormData(e.currentTarget as HTMLFormElement).get('q') as string).trim();
+    const v = String(new FormData(e.currentTarget as HTMLFormElement).get('q') ?? '').trim();
     location.hash = v ? `#/search?q=${encodeURIComponent(v)}` : '#/search';
   });
 
   if (!q) return;
 
-  const box = outlet.querySelector<HTMLElement>('#search-result')!;
-  const r = await api.search(q);
-  const total = r.posts.length + r.journals.length + r.albums.length + r.users.length;
-  if (!total) {
-    box.innerHTML = `<div class="card empty"><div class="empty-mark">${icon('search', 24)}</div>
-      <p class="empty-title">没有找到相关内容</p><p class="empty-desc">换个关键词试试。</p></div>`;
-    return;
-  }
+  const box = root.querySelector<HTMLElement>('#search-result')!;
+  try {
+    const r = await api.search(q);
+    const total = r.posts.length + r.users.length + r.albums.length;
+    if (!total) {
+      box.innerHTML = `<div class="card empty"><div class="empty-mark">${icon('search', 22)}</div>
+        <p class="empty-title">没有找到相关内容</p><p class="empty-desc">换个关键词试试。</p></div>`;
+      return;
+    }
 
-  box.innerHTML = `
-    ${
-      r.users.length
-        ? `<h3 class="section-title">好友 / 用户 <span class="count">${r.users.length}</span></h3>
-           <div class="result-users card">${r.users
-             .map(
-               (u) => `<a class="result-user" href="#/u/${esc(u.uin)}">
-                 <img src="${esc(u.avatar)}" alt=""><div><b>${esc(u.nickname)}</b>
-                 <span>${esc(u.uin)} · ${esc(u.signature || '')}</span></div>${icon('chevron', 14)}</a>`,
-             )
-             .join('')}</div>`
-        : ''
-    }
-    ${
-      r.posts.length
-        ? `<h3 class="section-title">说说 <span class="count">${r.posts.length}</span></h3>
-           <div class="card result-simple">${r.posts
-             .map(
-               (p) => `<a class="result-line" href="#/u/${esc(p.author.uin)}">
-                 <b>${esc(p.author.nickname)}</b><span>${esc(p.content.slice(0, 80))}</span></a>`,
-             )
-             .join('')}</div>`
-        : ''
-    }
-    ${
-      r.journals.length
-        ? `<h3 class="section-title">日志 <span class="count">${r.journals.length}</span></h3>
-           <div class="card result-simple">${r.journals
-             .map(
-               (j) => `<a class="result-line" href="#/j/${esc(j.id)}">
-                 <b>${esc(j.title)}</b><span>${esc(j.excerpt)}</span></a>`,
-             )
-             .join('')}</div>`
-        : ''
-    }
-    ${
-      r.albums.length
-        ? `<h3 class="section-title">相册 <span class="count">${r.albums.length}</span></h3>
-           <div class="result-albums">${r.albums
-             .map(
-               (a) => `<a class="result-album" href="#/a/${esc(a.id)}">
-                 <img src="${esc(a.cover)}" alt=""><span>${esc(a.name)} · ${a.count} 张</span></a>`,
-             )
-             .join('')}</div>`
-        : ''
-    }`;
+    box.innerHTML = `
+      ${
+        r.users.length
+          ? `<h2 class="result-title">用户 <span>${r.users.length}</span></h2>
+             <div class="card user-list">${r.users
+               .map(
+                 (u) => `<a class="user-row" href="#/u/${esc(u.uin)}">
+                   <img src="${esc(u.avatar)}" alt="">
+                   <div><b>${esc(u.nickname)}</b><span>@${esc(u.uin)} · ${esc(u.signature || '')}</span></div>
+                   ${icon('chevron', 14)}
+                 </a>`,
+               )
+               .join('')}</div>`
+          : ''
+      }
+      ${
+        r.posts.length
+          ? `<h2 class="result-title">文章 <span>${r.posts.length}</span></h2>
+             <div class="post-list card">${r.posts.map(postRowHTML).join('')}</div>`
+          : ''
+      }
+      ${
+        r.albums.length
+          ? `<h2 class="result-title">相册 <span>${r.albums.length}</span></h2>
+             <div class="album-grid">${r.albums
+               .map(
+                 (a) => `<a class="album-card card" href="#/album/${a.id}">
+                   <div class="album-cover">${a.cover ? `<img src="${esc(a.cover)}" alt="">` : ''}</div>
+                   <div class="album-info"><h3>${esc(a.name)}</h3><p>${a.count} 张</p></div>
+                 </a>`,
+               )
+               .join('')}</div>`
+          : ''
+      }`;
+  } catch (err) {
+    toast((err as Error).message, 'err');
+  }
 }

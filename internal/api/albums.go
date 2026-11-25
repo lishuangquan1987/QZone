@@ -208,6 +208,22 @@ func (s *Server) deleteAlbum(w http.ResponseWriter, r *http.Request, me *ent.Use
 		fail(w, http.StatusForbidden, "只能删除自己的相册")
 		return
 	}
+	// 先删照片及其点赞，再删相册
+	photoIDs, err := s.db.Photo.Query().Where(photo.HasAlbumWith(album.ID(id))).IDs(ctx)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if len(photoIDs) > 0 {
+		if _, err := s.db.PhotoLike.Delete().Where(photolike.HasPhotoWith(photo.IDIn(photoIDs...))).Exec(ctx); err != nil {
+			writeErr(w, err)
+			return
+		}
+		if _, err := s.db.Photo.Delete().Where(photo.IDIn(photoIDs...)).Exec(ctx); err != nil {
+			writeErr(w, err)
+			return
+		}
+	}
 	if err := s.db.Album.DeleteOneID(id).Exec(ctx); err != nil {
 		writeErr(w, err)
 		return
@@ -292,6 +308,10 @@ func (s *Server) deletePhoto(w http.ResponseWriter, r *http.Request, me *ent.Use
 	}
 	if a.OwnerID != me.ID {
 		fail(w, http.StatusForbidden, "只能删除自己相册里的照片")
+		return
+	}
+	if _, err := s.db.PhotoLike.Delete().Where(photolike.HasPhotoWith(photo.ID(pid))).Exec(ctx); err != nil {
+		writeErr(w, err)
 		return
 	}
 	if err := s.db.Photo.DeleteOneID(pid).Exec(ctx); err != nil {

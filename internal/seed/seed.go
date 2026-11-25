@@ -34,10 +34,13 @@ func Run(ctx context.Context, db *ent.Client, uploads string) error {
 		return err
 	}
 
-	// 背景音乐：本地生成的环境音，可直接被浏览器播放
-	bgmPath := filepath.Join(dir, "ambient.wav")
-	if _, err := os.Stat(bgmPath); os.IsNotExist(err) {
-		if err := os.WriteFile(bgmPath, media.AmbientWAV(48), 0o644); err != nil {
+	// 内置免费音乐库：程序合成的环境音，全部可直接播放
+	for _, t := range media.Tracks {
+		path := filepath.Join(dir, media.TrackFile(t.ID))
+		if _, err := os.Stat(path); err == nil {
+			continue
+		}
+		if err := os.WriteFile(path, media.AmbientTrack(t.ID, t.Seconds), 0o644); err != nil {
 			return err
 		}
 	}

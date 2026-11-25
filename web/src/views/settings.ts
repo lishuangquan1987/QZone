@@ -1,66 +1,63 @@
 import { api } from '../api';
-import { applyTheme, me, setMe, themes, state } from '../state';
+import { bgm } from '../music';
+import { applyTheme, me, setMe, themes } from '../state';
 import { esc, icon, toast } from '../ui';
 import type { ViewCtx } from '../types';
 
 const TABS = [
   { key: 'profile', label: '个人档' },
-  { key: 'decorate', label: '空间装扮' },
-  { key: 'privacy', label: '权限设置' },
+  { key: 'decorate', label: '装扮' },
+  { key: 'music', label: '背景音乐' },
 ];
 
-/** 个人档 / 装扮 / 权限。 */
-export async function renderSettings(outlet: HTMLElement, ctx: ViewCtx): Promise<void> {
+/** 空间设置：个人档 / 装扮 / 背景音乐。 */
+export async function renderSettings(root: HTMLElement, ctx: ViewCtx): Promise<void> {
   const tab = ctx.params.tab || 'profile';
   const u = me();
 
-  outlet.innerHTML = `
-    <section class="card module-head">
+  root.innerHTML = `<div class="page narrow">
+    <header class="page-head">
       <div>
-        <h2 class="module-title">${icon('gear', 18)} 空间设置</h2>
-        <p class="module-sub">修改资料、更换装扮与了解可见性规则。</p>
+        <p class="page-eyebrow">SETTINGS</p>
+        <h1>空间设置</h1>
+        <p class="page-sub">这些设置只影响你自己的空间。</p>
       </div>
-    </section>
-    <nav class="module-tabs">
-      ${TABS.map(
-        (t) => `<button class="module-tab ${t.key === tab ? 'active' : ''}" data-stab="${t.key}">${t.label}</button>`,
-      ).join('')}
+    </header>
+    <nav class="seg">
+      ${TABS.map((t) => `<button class="seg-btn ${t.key === tab ? 'active' : ''}" data-tab="${t.key}">${t.label}</button>`).join('')}
     </nav>
-    <div id="settings-body"></div>`;
+    <div id="settings-body"></div>
+  </div>`;
 
-  outlet.querySelectorAll<HTMLElement>('[data-stab]').forEach((b) => {
+  root.querySelectorAll<HTMLElement>('[data-tab]').forEach((b) => {
     b.addEventListener('click', () => {
-      location.hash = `#/settings?tab=${b.dataset.stab}`;
+      location.hash = `#/settings?tab=${b.dataset.tab}`;
     });
   });
 
-  const body = outlet.querySelector<HTMLElement>('#settings-body')!;
+  const body = root.querySelector<HTMLElement>('#settings-body')!;
 
   if (tab === 'decorate') {
-    body.innerHTML = `
-      <section class="card decorate-card">
-        <h3 class="form-title">空间封面</h3>
-        <div class="cover-preview" style="background-image:url('${esc(u.cover)}')"></div>
-        <label class="btn btn-ghost btn-sm">${icon('camera', 14)} 更换封面
-          <input type="file" id="cover-file" accept="image/*" hidden>
-        </label>
-        <h3 class="form-title">主题配色</h3>
-        <div class="theme-grid">
-          ${themes()
-            .map(
-              (t) => `<button class="theme-card ${u.theme === t.id ? 'active' : ''}" data-theme-id="${t.id}">
-                <span class="theme-swatch" style="background:${t.accent}"></span>
-                <span class="theme-name">${esc(t.name)}</span>
-              </button>`,
-            )
-            .join('')}
-        </div>
-        <h3 class="form-title">背景音乐</h3>
-        <div class="inline-form">
-          <input class="input" id="bgm-input" value="${esc(u.bgMusic)}" placeholder="如：晴天 - 周杰伦" maxlength="60">
-          <button class="btn btn-primary btn-sm" id="bgm-save">保存</button>
-        </div>
-      </section>`;
+    body.innerHTML = `<section class="card setting-card">
+      <h2 class="setting-title">空间封面</h2>
+      <div class="cover-preview" style="background-image:url('${esc(u.cover)}')" id="cover-preview"></div>
+      <label class="btn btn-ghost btn-sm">${icon('upload', 14)} 更换封面
+        <input type="file" id="cover-file" accept="image/*" hidden>
+      </label>
+
+      <h2 class="setting-title">主题配色</h2>
+      <p class="setting-hint">主题会改变链接、按钮与强调色，立刻生效。</p>
+      <div class="theme-grid">
+        ${themes()
+          .map(
+            (t) => `<button class="theme-card ${u.theme === t.id ? 'active' : ''}" data-theme="${t.id}">
+              <span class="theme-swatch" style="background:${t.accent}"></span>
+              <span>${esc(t.name)}</span>
+            </button>`,
+          )
+          .join('')}
+      </div>
+    </section>`;
 
     body.querySelector<HTMLInputElement>('#cover-file')!.addEventListener('change', async (e) => {
       const f = (e.target as HTMLInputElement).files?.[0];
@@ -69,35 +66,196 @@ export async function renderSettings(outlet: HTMLElement, ctx: ViewCtx): Promise
         const { url } = await api.upload(f);
         const updated = await api.updateProfile({ cover: url });
         setMe(updated);
-        toast('封面已更新，刷新后全局生效', 'ok');
-        await ctx.reload();
+        body.querySelector<HTMLElement>('#cover-preview')!.style.backgroundImage = `url('${url}')`;
+        toast('封面已更新', 'ok');
       } catch (err) {
         toast((err as Error).message, 'err');
       }
     });
 
-    body.querySelectorAll<HTMLElement>('[data-theme-id]').forEach((btn) => {
+    body.querySelectorAll<HTMLElement>('[data-theme]').forEach((btn) => {
       btn.addEventListener('click', async () => {
-        const id = btn.dataset.themeId!;
+        const id = btn.dataset.theme!;
         try {
           const updated = await api.updateProfile({ theme: id });
           setMe(updated);
           applyTheme(id);
-          body.querySelectorAll('[data-theme-id]').forEach((x) => x.classList.remove('active'));
+          body.querySelectorAll('[data-theme]').forEach((x) => x.classList.remove('active'));
           btn.classList.add('active');
-          toast('装扮已应用', 'ok');
+          toast('主题已切换', 'ok');
         } catch (err) {
           toast((err as Error).message, 'err');
         }
       });
     });
+    return;
+  }
 
-    body.querySelector('#bgm-save')!.addEventListener('click', async () => {
-      const v = body.querySelector<HTMLInputElement>('#bgm-input')!.value.trim();
+  if (tab === 'music') {
+    body.innerHTML = `<section class="card setting-card">
+      <h2 class="setting-title">内置免费音乐</h2>
+      <p class="setting-hint">曲目由程序实时合成，无版权限制；点「试听」立即播放，「设为背景音乐」保存到你的空间。</p>
+      <div class="music-library" id="music-library"><span class="muted">加载中…</span></div>
+
+      <h2 class="setting-title">当前背景音乐</h2>
+      <div class="music-current">
+        <div class="music-disc ${bgm.isPlaying() ? 'spin' : ''}">${icon('music', 16)}</div>
+        <div class="music-current-meta">
+          <b id="bgm-name">${esc(u.bgmTitle || '还没有设置音轨')}</b>
+          <span id="bgm-sub">${u.bgmUrl ? '已保存，会在页面左下角循环播放' : '上传、选一首内置曲目，或填写直链'}</span>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="preview-btn">${icon('play', 13)} 试听</button>
+      </div>
+      <label class="field">
+        <span>显示名称</span>
+        <input class="input" id="bgm-title" maxlength="60" value="${esc(u.bgmTitle)}" placeholder="比如：夜航">
+      </label>
+      <div class="setting-actions">
+        <button class="btn btn-primary" id="save-bgm">保存设置</button>
+        ${u.bgmUrl ? `<button class="btn btn-ghost danger" id="clear-bgm">移除背景音乐</button>` : ''}
+      </div>
+
+      <h2 class="setting-title">上传本地音频</h2>
+      <p class="setting-hint">支持 MP3 / M4A / OGG / WAV / FLAC，单个文件不超过 50MB。</p>
+      <label class="btn btn-ghost btn-sm">${icon('upload', 14)} 选择音频文件
+        <input type="file" id="audio-file" accept="audio/*" hidden>
+      </label>
+
+      <h2 class="setting-title">使用音频直链</h2>
+      <p class="setting-hint">填写任意可公开访问的音频地址（http/https 或站内 /media 路径）。</p>
+      <div class="inline-form">
+        <input class="input" id="bgm-url" placeholder="https://example.com/song.mp3">
+        <button class="btn btn-primary btn-sm" id="bgm-url-save">使用</button>
+      </div>
+      <p class="setting-hint" style="margin-top:14px">
+        说明：QQ 音乐等平台的播放接口需要签名与版权授权，本项目不抓取这些内容；这里提供的是可自由使用的合成曲目、你自己上传的音频，或你有权使用的直链。
+      </p>
+    </section>`;
+
+    let pendingUrl = u.bgmUrl;
+    let pendingTitle = u.bgmTitle;
+
+    const syncCurrent = () => {
+      (body.querySelector('#bgm-name') as HTMLElement).textContent = pendingTitle || '还没有设置音轨';
+      (body.querySelector('#bgm-sub') as HTMLElement).textContent = pendingUrl
+        ? '已选择，保存后生效'
+        : '上传、选一首内置曲目，或填写直链';
+      if (!(body.querySelector('#bgm-title') as HTMLInputElement).value) {
+        (body.querySelector('#bgm-title') as HTMLInputElement).value = pendingTitle;
+      }
+    };
+
+    const pick = (url: string, title: string) => {
+      pendingUrl = url;
+      pendingTitle = title;
+      (body.querySelector('#bgm-title') as HTMLInputElement).value = title;
+      syncCurrent();
+    };
+
+    // 内置曲库
+    try {
+      const { tracks } = await api.musicLibrary();
+      const box = body.querySelector('#music-library')!;
+      box.innerHTML = tracks
+        .map(
+          (t) => `<article class="lib-card" data-id="${esc(t.id)}">
+            <div class="lib-main">
+              <b>${esc(t.title)}</b>
+              <span>${esc(t.mood)} · ${t.duration} 秒</span>
+            </div>
+            <div class="lib-actions">
+              <button class="btn btn-ghost btn-sm" data-play="${esc(t.url)}" data-title="${esc(t.title)}">${icon('play', 12)} 试听</button>
+              <button class="btn btn-soft btn-sm" data-pick="${esc(t.url)}" data-title="${esc(t.title)}">设为背景</button>
+            </div>
+          </article>`,
+        )
+        .join('');
+
+      box.addEventListener('click', (e) => {
+        const t = e.target as HTMLElement;
+        const play = t.closest<HTMLElement>('[data-play]');
+        if (play) {
+          bgm.setTrack(play.dataset.play!, play.dataset.title!);
+          if (!bgm.isPlaying()) bgm.toggle();
+          body.querySelector('.music-disc')?.classList.add('spin');
+          return;
+        }
+        const pickBtn = t.closest<HTMLElement>('[data-pick]');
+        if (pickBtn) {
+          pick(pickBtn.dataset.pick!, pickBtn.dataset.title!);
+          toast(`已选择《${pickBtn.dataset.title}》，记得点保存`, 'ok');
+        }
+      });
+    } catch (err) {
+      body.querySelector('#music-library')!.innerHTML = `<span class="muted">曲库加载失败：${esc((err as Error).message)}</span>`;
+    }
+
+    // 上传
+    const audioInput = body.querySelector<HTMLInputElement>('#audio-file')!;
+    audioInput.addEventListener('change', async () => {
+      const f = audioInput.files?.[0];
+      if (!f) return;
+      if (f.size > 50 * 1024 * 1024) {
+        toast('音频不能超过 50MB', 'err');
+        return;
+      }
+      toast('正在上传音频…');
       try {
-        const updated = await api.updateProfile({ bgMusic: v });
+        const { url } = await api.uploadAudio(f);
+        pick(url, f.name.replace(/\.[^.]+$/, ''));
+        toast('上传完成，点保存生效', 'ok');
+      } catch (err) {
+        toast((err as Error).message, 'err');
+      } finally {
+        audioInput.value = '';
+      }
+    });
+
+    // 直链
+    body.querySelector('#bgm-url-save')!.addEventListener('click', () => {
+      const input = body.querySelector<HTMLInputElement>('#bgm-url')!;
+      const v = input.value.trim();
+      if (!v) {
+        toast('请填写音频地址', 'err');
+        return;
+      }
+      if (!/^(https?:\/\/|\/media\/)/.test(v)) {
+        toast('地址需要以 http(s):// 或 /media/ 开头', 'err');
+        return;
+      }
+      pick(v, v.split('/').pop()?.replace(/\.[^.]+$/, '') || '外部音频');
+      toast('已填入，点保存生效', 'ok');
+    });
+
+    // 试听 / 保存 / 移除
+    body.querySelector('#preview-btn')!.addEventListener('click', () => {
+      if (!pendingUrl) {
+        toast('还没有选择音轨', 'err');
+        return;
+      }
+      bgm.setTrack(pendingUrl, pendingTitle);
+      bgm.toggle();
+      setTimeout(() => body.querySelector('.music-disc')?.classList.toggle('spin', bgm.isPlaying()), 150);
+    });
+
+    body.querySelector('#save-bgm')!.addEventListener('click', async () => {
+      const title = (body.querySelector('#bgm-title') as HTMLInputElement).value.trim();
+      try {
+        const updated = await api.updateProfile({ bgmUrl: pendingUrl, bgmTitle: title });
         setMe(updated);
-        toast('已保存背景音乐', 'ok');
+        window.dispatchEvent(new CustomEvent('qz:profile', { detail: { bgmUrl: updated.bgmUrl, bgmTitle: updated.bgmTitle } }));
+        toast('背景音乐已保存', 'ok');
+      } catch (err) {
+        toast((err as Error).message, 'err');
+      }
+    });
+
+    body.querySelector('#clear-bgm')?.addEventListener('click', async () => {
+      try {
+        const updated = await api.updateProfile({ bgmUrl: '', bgmTitle: '' });
+        setMe(updated);
+        window.dispatchEvent(new CustomEvent('qz:profile', { detail: { bgmUrl: '', bgmTitle: '' } }));
+        toast('已移除背景音乐', 'ok');
         await ctx.reload();
       } catch (err) {
         toast((err as Error).message, 'err');
@@ -106,47 +264,38 @@ export async function renderSettings(outlet: HTMLElement, ctx: ViewCtx): Promise
     return;
   }
 
-  if (tab === 'privacy') {
-    body.innerHTML = `
-      <section class="card privacy-card">
-        <h3 class="form-title">内容可见范围</h3>
-        <p class="form-hint">每条说说、相册、日志都可以单独设置可见性，发布时会按所选范围过滤。</p>
-        <div class="rules">
-          <div class="rule"><b>所有人可见</b><span>任何能访问你空间的人都可以看到。</span></div>
-          <div class="rule"><b>仅好友可见</b><span>只有好友列表里的人能看到，非好友访问时会被过滤。</span></div>
-          <div class="rule"><b>仅自己可见</b><span>进入自己的空间才能看到，其他人（包括好友）都不可见。</span></div>
-        </div>
-        <h3 class="form-title">访客记录</h3>
-        <p class="form-hint">谁会留下足迹：任何访问你空间的登录用户，都会记录到「谁看过我」，并在你的消息中心生成一条访客消息。</p>
-      </section>`;
-    return;
-  }
-
-  body.innerHTML = `
-    <section class="card profile-form-card">
-      <div class="avatar-edit">
-        <img src="${esc(u.avatar)}" alt="" id="avatar-preview">
-        <label class="btn btn-ghost btn-sm">${icon('camera', 14)} 更换头像
-          <input type="file" id="avatar-file" accept="image/*" hidden>
-        </label>
+  // 个人档
+  body.innerHTML = `<section class="card setting-card">
+    <div class="avatar-line">
+      <img src="${esc(u.avatar)}" alt="" id="avatar-preview">
+      <div>
+        <b>${esc(u.nickname)}</b>
+        <p class="muted">@${esc(u.uin)} · Lv.${u.level}</p>
       </div>
-      <form class="profile-form" id="profile-form">
-        <div class="form-grid">
-          <label class="field"><span>昵称</span><input class="input" name="nickname" maxlength="20" value="${esc(u.nickname)}"></label>
-          <label class="field"><span>城市</span><input class="input" name="city" maxlength="20" value="${esc(u.city)}"></label>
-          <label class="field"><span>心情</span><input class="input" name="mood" maxlength="20" value="${esc(u.mood)}"></label>
-          <label class="field"><span>背景音乐</span><input class="input" name="bgMusic" maxlength="60" value="${esc(u.bgMusic)}"></label>
-        </div>
-        <label class="field"><span>个性签名</span>
-          <input class="input" name="signature" maxlength="60" value="${esc(u.signature)}"></label>
-        <label class="field"><span>标签（逗号分隔，最多 8 个）</span>
-          <input class="input" name="tags" value="${esc(u.tags.join(','))}"></label>
-        <div class="form-foot">
-          <button class="btn btn-primary" type="submit">保存修改</button>
-          <span class="form-hint">QQ 号 ${esc(u.uin)} · Lv.${u.level} · ${u.vip ? `黄钻 ${u.vip} 级` : '未开通黄钻'}</span>
-        </div>
-      </form>
-    </section>`;
+      <label class="btn btn-ghost btn-sm">${icon('upload', 14)} 更换头像
+        <input type="file" id="avatar-file" accept="image/*" hidden>
+      </label>
+    </div>
+
+    <form id="profile-form" class="setting-form">
+      <div class="form-2col">
+        <label class="field"><span>昵称</span><input class="input" name="nickname" maxlength="20" value="${esc(u.nickname)}"></label>
+        <label class="field"><span>城市</span><input class="input" name="city" maxlength="20" value="${esc(u.city)}"></label>
+      </div>
+      <label class="field"><span>一句话签名</span><input class="input" name="signature" maxlength="80" value="${esc(u.signature)}"></label>
+      <label class="field">
+        <span>自我介绍（Markdown，会显示在「关于」页）</span>
+        <textarea class="input" name="bio" rows="8" maxlength="4000" placeholder="## 关于我&#10;&#10;写文章…">${esc(u.bio)}</textarea>
+      </label>
+      <label class="field"><span>标签（逗号分隔，最多 8 个）</span>
+        <input class="input" name="tags" value="${esc(u.tags.join(','))}" placeholder="写作, 摄影, 徒步">
+      </label>
+      <div class="setting-actions">
+        <button class="btn btn-primary" type="submit">保存修改</button>
+        <span class="muted">空间号注册后不可修改</span>
+      </div>
+    </form>
+  </section>`;
 
   body.querySelector<HTMLInputElement>('#avatar-file')!.addEventListener('change', async (e) => {
     const f = (e.target as HTMLInputElement).files?.[0];
@@ -156,7 +305,7 @@ export async function renderSettings(outlet: HTMLElement, ctx: ViewCtx): Promise
       const updated = await api.updateProfile({ avatar: url });
       setMe(updated);
       (body.querySelector('#avatar-preview') as HTMLImageElement).src = url;
-      toast('头像已更新，刷新后全局生效', 'ok');
+      toast('头像已更新', 'ok');
     } catch (err) {
       toast((err as Error).message, 'err');
     }
@@ -164,8 +313,7 @@ export async function renderSettings(outlet: HTMLElement, ctx: ViewCtx): Promise
 
   body.querySelector<HTMLFormElement>('#profile-form')!.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const f = e.currentTarget as HTMLFormElement;
-    const data = new FormData(f);
+    const data = new FormData(e.currentTarget as HTMLFormElement);
     const tags = String(data.get('tags') ?? '')
       .split(/[,，\s]+/)
       .map((s) => s.trim())
@@ -175,19 +323,15 @@ export async function renderSettings(outlet: HTMLElement, ctx: ViewCtx): Promise
       const updated = await api.updateProfile({
         nickname: String(data.get('nickname') ?? '').trim(),
         city: String(data.get('city') ?? '').trim(),
-        mood: String(data.get('mood') ?? '').trim(),
         signature: String(data.get('signature') ?? '').trim(),
-        bgMusic: String(data.get('bgMusic') ?? '').trim(),
+        bio: String(data.get('bio') ?? ''),
         tags,
       });
       setMe(updated);
       toast('已保存', 'ok');
       await ctx.reload();
-      ctx.refreshRail();
     } catch (err) {
       toast((err as Error).message, 'err');
     }
   });
-
-  void state;
 }

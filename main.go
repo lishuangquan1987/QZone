@@ -24,6 +24,8 @@ var webDist embed.FS
 func main() {
 	addr := flag.String("addr", ":8080", "监听地址")
 	dataDir := flag.String("data", "data", "数据与上传目录")
+	maxImageMB := flag.Int("max-image", 30, "单张图片上限（MB）")
+	maxAudioMB := flag.Int("max-audio", 50, "单段音频上限（MB）")
 	flag.Parse()
 
 	uploads := filepath.Join(*dataDir, "uploads")
@@ -54,7 +56,10 @@ func main() {
 		log.Fatalf("前端资源异常: %v", err)
 	}
 
-	srv := api.New(client, uploads, sub)
+	srv := api.New(client, uploads, sub, api.Options{
+		MaxImage: int64(*maxImageMB) << 20,
+		MaxAudio: int64(*maxAudioMB) << 20,
+	})
 	httpSrv := &http.Server{
 		Addr:              *addr,
 		Handler:           srv.Handler(),

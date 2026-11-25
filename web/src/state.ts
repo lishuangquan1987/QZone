@@ -1,16 +1,13 @@
-import type { UserView, FriendView, Theme } from './api';
+import type { Theme, UserView } from './api';
 
 interface Boot {
   me: UserView;
-  friends: FriendView[];
-  unread: number;
   themes: Theme[];
+  unread: number;
 }
 
 export const state = {
   boot: null as Boot | null,
-  /** 当前浏览的空间主人（自己或他人） */
-  spaceUin: '',
 } as const;
 
 export function me(): UserView {
@@ -26,8 +23,8 @@ export function setMe(u: UserView): void {
   if (state.boot) state.boot.me = u;
 }
 
-export function setFriends(list: FriendView[]): void {
-  if (state.boot) state.boot.friends = list;
+export function themes(): Theme[] {
+  return state.boot?.themes ?? [];
 }
 
 export function unread(): number {
@@ -36,20 +33,15 @@ export function unread(): number {
 
 export function setUnread(n: number): void {
   if (state.boot) state.boot.unread = n;
-  document.querySelectorAll<HTMLElement>('[data-unread-badge]').forEach((el) => {
+  document.querySelectorAll<HTMLElement>('[data-unread]').forEach((el) => {
     el.textContent = n > 99 ? '99+' : String(n);
     el.hidden = n === 0;
   });
 }
 
-export function themes(): Theme[] {
-  return state.boot?.themes ?? [];
-}
-
-/** 应用装扮主题（写入 data-theme 与强调色）。 */
+/** 应用主题：写入 data-theme 与强调色。 */
 export function applyTheme(id: string): void {
-  document.documentElement.dataset.theme = id || 'classic';
-  const t = themes().find((x) => x.id === id);
-  if (t) document.documentElement.style.setProperty('--accent', t.accent);
-  else document.documentElement.style.removeProperty('--accent');
+  const theme = themes().find((t) => t.id === id) ?? themes()[0];
+  document.documentElement.dataset.theme = theme?.id ?? 'aurora';
+  if (theme) document.documentElement.style.setProperty('--accent', theme.accent);
 }

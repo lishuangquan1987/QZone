@@ -240,11 +240,11 @@ func (s *Server) bootstrap(w http.ResponseWriter, r *http.Request, me *ent.User)
 		"me":     view,
 		"unread": unreadCount(ctx, s.db, me.ID),
 		"themes": []map[string]string{
-			{"id": "aurora", "name": "极光", "accent": "#5b6cff"},
-			{"id": "ember", "name": "余烬", "accent": "#e2703a"},
-			{"id": "forest", "name": "森野", "accent": "#2f8f6f"},
-			{"id": "ink", "name": "墨色", "accent": "#3c4a5a"},
-			{"id": "sakura", "name": "樱雾", "accent": "#d6698f"},
+			{"id": "aurora", "name": "松墨", "accent": "#2f5d50"},
+			{"id": "ember", "name": "陶土", "accent": "#9a4a33"},
+			{"id": "forest", "name": "靛青", "accent": "#3a4a63"},
+			{"id": "ink", "name": "墨黑", "accent": "#33302b"},
+			{"id": "sakura", "name": "绛粉", "accent": "#9c5468"},
 		},
 	})
 }

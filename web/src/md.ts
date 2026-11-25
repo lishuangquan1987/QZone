@@ -8,10 +8,8 @@ marked.setOptions({ gfm: true, breaks: true });
  */
 export function renderMarkdown(src: string): string {
   if (!src) return '';
-  const escaped = src
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+  // 只转义 & 与 <：保留 > 让 Markdown 的引用语法仍然生效
+  const escaped = src.replace(/&/g, '&amp;').replace(/</g, '&lt;');
   const html = marked.parse(escaped, { async: false }) as string;
   // 外链新开窗口，并补上 rel
   return html.replace(/<a href="(https?:\/\/[^"]+)"/g, '<a href="$1" target="_blank" rel="noopener noreferrer"');

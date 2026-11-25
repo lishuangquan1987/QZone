@@ -6,66 +6,55 @@ import type { ViewCtx } from '../types';
 const TABS = [
   { key: 'in', label: '谁看过我' },
   { key: 'out', label: '我看过谁' },
-  { key: 'blocked', label: '被挡访客' },
 ];
 
-/** 访客：谁看过我 / 我看过谁 / 被挡访客。 */
-export async function renderVisitors(outlet: HTMLElement, ctx: ViewCtx): Promise<void> {
+/** 访客记录（仅主人可见）。 */
+export async function renderVisitors(root: HTMLElement, ctx: ViewCtx): Promise<void> {
   const u = me();
-  const tab = ctx.params.tab || 'in';
+  const tab = ctx.params.tab === 'out' ? 'out' : 'in';
 
-  outlet.innerHTML = `
-    <section class="card module-head">
+  root.innerHTML = `<div class="page narrow">
+    <header class="page-head">
       <div>
-        <h2 class="module-title">${icon('eye', 18)} 访客</h2>
-        <p class="module-sub" id="visit-sub">正在读取足迹…</p>
+        <p class="page-eyebrow">VISITORS</p>
+        <h1>访客</h1>
+        <p class="page-sub" id="visit-sub">读取中…</p>
       </div>
-      <span class="head-note">${icon('lock', 13)} 仅自己可见</span>
-    </section>
-    <nav class="module-tabs">
-      ${TABS.map(
-        (t) => `<button class="module-tab ${t.key === tab ? 'active' : ''}" data-vtab="${t.key}">${t.label}</button>`,
-      ).join('')}
+      <span class="lock-note">${icon('lock', 13)} 仅自己可见</span>
+    </header>
+    <nav class="seg">
+      ${TABS.map((t) => `<button class="seg-btn ${t.key === tab ? 'active' : ''}" data-tab="${t.key}">${t.label}</button>`).join('')}
     </nav>
-    <div id="visitor-list"></div>`;
+    <div id="visit-list"></div>
+  </div>`;
 
-  const list = outlet.querySelector<HTMLElement>('#visitor-list')!;
-  const sub = outlet.querySelector('#visit-sub')!;
-
-  outlet.querySelectorAll<HTMLElement>('[data-vtab]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      location.hash = `#/visitors?tab=${btn.dataset.vtab}`;
+  root.querySelectorAll<HTMLElement>('[data-tab]').forEach((b) => {
+    b.addEventListener('click', () => {
+      location.hash = `#/visitors?tab=${b.dataset.tab}`;
     });
   });
 
-  if (tab === 'blocked') {
-    sub.textContent = '被挡访客需要黄钻权限';
-    list.innerHTML = emptyState('暂无被挡访客', '开通黄钻后可查看被权限挡住的访客记录。');
-    return;
-  }
-
-  const r = await api.visitors(u.uin, tab === 'out' ? 'out' : 'in');
-  sub.textContent =
-    tab === 'in'
-      ? `累计 ${r.total.toLocaleString()} 人次 · 今日 ${r.today} 人`
-      : `你最近访问了 ${r.visitors.length} 个空间`;
+  const list = root.querySelector<HTMLElement>('#visit-list')!;
+  const r = await api.visitors(u.uin, tab);
+  root.querySelector('#visit-sub')!.textContent =
+    tab === 'in' ? `累计 ${r.total.toLocaleString()} 人次 · 今日 ${r.today} 人` : `你最近访问了 ${r.visitors.length} 个空间`;
 
   list.innerHTML = r.visitors.length
-    ? `<div class="card visitor-table">${r.visitors
+    ? `<div class="card visit-list">${r.visitors
         .map(
-          (v) => `<div class="visitor-row">
-            ${avatarHTML(v.author.avatar, v.author.nickname, 40, v.author.uin, v.author.level)}
-            <div class="visitor-main">
-              <a class="visitor-name" href="#/u/${esc(v.author.uin)}">${esc(v.author.nickname)}</a>
-              <span class="visitor-mod">${tab === 'in' ? '看了' : '访问了'} · ${esc(v.module)}</span>
+          (v) => `<a class="visit-row" href="#/u/${esc(v.author.uin)}">
+            ${avatarHTML(v.author.avatar, v.author.nickname, 40, v.author.uin)}
+            <div class="visit-main">
+              <b>${esc(v.author.nickname)}</b>
+              <span>${tab === 'in' ? '看了' : '访问了'} · ${esc(v.module)}</span>
             </div>
-            <time class="visitor-time">${timeAgo(v.at)}</time>
-          </div>`,
+            <time>${timeAgo(v.at)}</time>
+          </a>`,
         )
         .join('')}</div>`
     : emptyState(
         tab === 'in' ? '还没有人来过' : '还没有访问记录',
-        tab === 'in' ? '多和好友互动，访客会多起来的。' : '去好友的空间逛一逛吧。',
-        `<a class="btn btn-primary btn-sm" href="#/friends">去看看好友</a>`,
+        tab === 'in' ? '多和好友互动，访客会多起来的。' : '去别人的主页逛一逛吧。',
+        `<a class="btn btn-primary btn-sm" href="#/search">去搜索好友</a>`,
       );
 }

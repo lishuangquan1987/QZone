@@ -20,4 +20,6 @@ qzone.exe
 .DS_Store
 Thumbs.db
 *.log
-web/dist/
+
+# 编辑器/系统备份文件
+*~

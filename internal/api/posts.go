@@ -247,6 +247,15 @@ func (s *Server) deletePost(w http.ResponseWriter, r *http.Request, me *ent.User
 		fail(w, http.StatusForbidden, "只能删除自己的文章")
 		return
 	}
+	// 手动级联：评论与点赞先删，避免外键约束阻塞
+	if _, err := s.db.Comment.Delete().Where(comment.HasPostWith(post.ID(id))).Exec(ctx); err != nil {
+		writeErr(w, err)
+		return
+	}
+	if _, err := s.db.PostLike.Delete().Where(postlike.HasPostWith(post.ID(id))).Exec(ctx); err != nil {
+		writeErr(w, err)
+		return
+	}
 	if err := s.db.Post.DeleteOneID(id).Exec(ctx); err != nil {
 		writeErr(w, err)
 		return
@@ -418,7 +427,7 @@ func (s *Server) postViews(ctx context.Context, rows []*ent.Post, viewerID int, 
 
 	cms, err := s.db.Comment.Query().
 		Where(comment.HasPostWith(post.IDIn(ids...))).
-		WithAuthor().
+		WithAuthor().WithPost().
 		Order(ent.Asc(comment.FieldCreatedAt)).
 		All(ctx)
 	if err != nil {

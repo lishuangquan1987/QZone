@@ -51,33 +51,96 @@ func Cover(i int) string {
 <linearGradient id="hill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="` + c2[1] + `" stop-opacity="0.9"/><stop offset="1" stop-color="` + c2[0] + `" stop-opacity="0.25"/></linearGradient>
 </defs>
 <rect width="1600" height="520" fill="url(#sky)"/>
-<circle cx="1290" cy="126" r="72" fill="#ffffff" fill-opacity="0.55"/>
-<circle cx="1290" cy="126" r="150" fill="#ffffff" fill-opacity="0.12"/>
+
 <path d="M0 396 C 220 306 420 372 620 330 C 840 284 1020 366 1220 330 C 1400 298 1500 350 1600 322 L1600 520 L0 520 Z" fill="url(#hill)"/>
-<path d="M0 448 C 280 386 480 442 720 414 C 960 386 1180 448 1600 402 L1600 520 L0 520 Z" fill="#ffffff" fill-opacity="0.24"/>
+<path d="M0 448 C 280 386 480 442 720 414 C 960 386 1180 448 1600 402 L1600 520 L0 520 Z" fill="#ffffff" fill-opacity="0.18"/>
+<path d="M0 380 C 300 330 520 372 780 348 C 1040 324 1300 368 1600 336 L1600 400 L0 400 Z" fill="#ffffff" fill-opacity="0.1"/>
 <g fill="#ffffff" fill-opacity="0.4"><circle cx="320" cy="140" r="3"/><circle cx="470" cy="96" r="2.2"/><circle cx="620" cy="170" r="2.6"/><circle cx="860" cy="80" r="2"/></g>
 </svg>`
 }
 
-// Photo 生成一张抽象「照片」，用于示例相册。
+// Photo 生成一张抽象「照片」：分层山脊 / 雾面 / 远山与水面三种构图，
+// 按索引轮换，避免整片纯色，也避免过大的白色光斑。
 func Photo(i int) string {
 	c := palette(i)
 	c2 := palette(i + 5)
-	cx := 190 + (i*137)%700
-	cy := 150 + (i*89)%300
-	return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900">
-<defs>
-<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="` + c[0] + `"/><stop offset="1" stop-color="` + c[1] + `"/></linearGradient>
-<radialGradient id="glow"><stop offset="0" stop-color="#ffffff" stop-opacity="0.8"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>
-<linearGradient id="band" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="` + c2[0] + `" stop-opacity="0.6"/><stop offset="1" stop-color="` + c2[1] + `" stop-opacity="0.12"/></linearGradient>
-</defs>
-<rect width="1200" height="900" fill="url(#bg)"/>
-<circle cx="` + itoa(cx) + `" cy="` + itoa(cy) + `" r="300" fill="url(#glow)"/>
-<circle cx="` + itoa(cx) + `" cy="` + itoa(cy) + `" r="96" fill="#ffffff" fill-opacity="0.6"/>
-<path d="M0 690 C 200 610 380 690 590 632 C 800 574 980 664 1200 610 L1200 900 L0 900 Z" fill="url(#band)"/>
-<path d="M0 780 C 240 720 450 782 700 748 C 950 714 1050 772 1200 738 L1200 900 L0 900 Z" fill="` + c2[1] + `" fill-opacity="0.4"/>
-<g fill="#ffffff" fill-opacity="0.5"><circle cx="180" cy="220" r="3.5"/><circle cx="320" cy="150" r="2.6"/><circle cx="960" cy="200" r="3"/><circle cx="1040" cy="120" r="2.4"/></g>
-</svg>`
+	c3 := palette(i + 2)
+
+	sunX := itoa(300 + (i*137)%700)
+	sunY := itoa(180 + (i*61)%180)
+	horizon := 520 + (i*37)%120
+
+	var bokeh string
+	for k := 0; k < 4; k++ {
+		bx := itoa(120 + (i*173+k*211)%960)
+		by := itoa(90 + (i*97+k*157)%560)
+		br := itoa(6 + (i+k*13)%16)
+		bokeh += `<circle cx="` + bx + `" cy="` + by + `" r="` + br + `" fill="#ffffff" fill-opacity="0.26"/>`
+	}
+
+	vig := `<radialGradient id="vig" cx="0.5" cy="0.45" r="0.78"><stop offset="0.55" stop-color="#000000" stop-opacity="0"/><stop offset="1" stop-color="#000000" stop-opacity="0.16"/></radialGradient>`
+	open := `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900"><defs>`
+	close := `<rect width="1200" height="900" fill="url(#vig)"/></svg>`
+
+	switch i % 3 {
+	case 0: // 地平线 + 起伏山脊
+		v := ``
+		v += `<linearGradient id="sky" x1="0" y1="0" x2="0.25" y2="1"><stop offset="0" stop-color="{c0}"/><stop offset="0.6" stop-color="{c1}"/><stop offset="1" stop-color="{c3}"/></linearGradient>`
+		v += `<radialGradient id="sun" cx="0.5" cy="0.5"><stop offset="0" stop-color="#ffffff" stop-opacity="0.5"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>`
+		v += vig
+		v += `</defs><rect width="1200" height="900" fill="url(#sky)"/>`
+		v += `<circle cx="{sunX}" cy="{sunY}" r="160" fill="url(#sun)"/>`
+		v += `<path d="M0 {h1} C 240 {h2} 420 {h3} 640 {h4} C 860 {h5} 1020 {h6} 1200 {h7} L1200 900 L0 900 Z" fill="{c3}" fill-opacity="0.5"/>`
+		v += `<path d="M0 {h8} C 260 {h9} 470 {h10} 700 {h11} C 920 {h12} 1060 {h13} 1200 {h14} L1200 900 L0 900 Z" fill="{c2a}" fill-opacity="0.78"/>`
+		v += bokeh + close
+
+		kv := map[string]string{
+			"c0": c[0], "c1": c[1], "c3": c3[1], "c2a": c2[0],
+			"sunX": sunX, "sunY": sunY,
+			"h1": itoa(horizon), "h2": itoa(horizon - 60), "h3": itoa(horizon + 10), "h4": itoa(horizon - 30),
+			"h5": itoa(horizon + 20), "h6": itoa(horizon - 50), "h7": itoa(horizon - 20),
+			"h8": itoa(horizon + 110), "h9": itoa(horizon + 40), "h10": itoa(horizon + 130),
+			"h11": itoa(horizon + 60), "h12": itoa(horizon + 140), "h13": itoa(horizon + 30), "h14": itoa(horizon + 90),
+		}
+		return fill(open+v, kv)
+
+	case 1: // 雾面与光斑
+		v := ``
+		v += `<linearGradient id="sky" x1="0" y1="0" x2="0.2" y2="1"><stop offset="0" stop-color="{c0}"/><stop offset="0.55" stop-color="{c1}"/><stop offset="1" stop-color="{c3}"/></linearGradient>`
+		v += `<radialGradient id="mist" cx="0.62" cy="0.36" r="0.52"><stop offset="0" stop-color="#ffffff" stop-opacity="0.3"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>`
+		v += vig
+		v += `</defs><rect width="1200" height="900" fill="url(#sky)"/><rect width="1200" height="900" fill="url(#mist)"/>`
+		v += bokeh
+		v += `<rect y="660" width="1200" height="240" fill="{c2a}" fill-opacity="0.16"/>`
+		v += `<rect y="740" width="1200" height="160" fill="{c2b}" fill-opacity="0.14"/>`
+		v += close
+		return fill(open+v, map[string]string{"c0": c[0], "c1": c[1], "c3": c[1], "c2a": c3[1], "c2b": c2[0]})
+
+	default: // 远山与水面倒影
+		v := ``
+		v += `<linearGradient id="sky" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="{c0}"/><stop offset="1" stop-color="{c1}"/></linearGradient>`
+		v += `<linearGradient id="water" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{c2a}" stop-opacity="0.45"/><stop offset="1" stop-color="{c2b}" stop-opacity="0.9"/></linearGradient>`
+		v += vig
+		v += `</defs><rect width="1200" height="900" fill="url(#sky)"/>`
+		v += `<path d="M0 400 L200 250 L360 380 L520 210 L700 400 Z" fill="{c3}" fill-opacity="0.4"/>`
+		v += `<path d="M420 430 L640 270 L820 430 Z" fill="{c3}" fill-opacity="0.3"/>`
+		v += `<rect y="430" width="1200" height="470" fill="url(#water)"/>`
+		v += `<rect y="472" width="1200" height="2" fill="#ffffff" fill-opacity="0.45"/>`
+		v += `<rect y="546" width="1200" height="2" fill="#ffffff" fill-opacity="0.28"/>`
+		v += `<rect y="634" width="1200" height="2" fill="#ffffff" fill-opacity="0.16"/>`
+		v += bokeh + close
+		return fill(open+v, map[string]string{
+			"c0": c[0], "c1": c[1], "c3": c3[0], "c2a": c2[1], "c2b": c2[0],
+		})
+	}
+}
+
+// fill 用 {key} 占位符替换，避免格式化字符串的参数错位。
+func fill(tpl string, kv map[string]string) string {
+	for k, v := range kv {
+		tpl = strings.ReplaceAll(tpl, "{"+k+"}", v)
+	}
+	return tpl
 }
 
 func itoa(n int) string { return fmt.Sprintf("%d", n) }
@@ -93,33 +156,68 @@ func WriteAsset(dir, name, body, urlPrefix string) (string, error) {
 	return path.Join(urlPrefix, name), nil
 }
 
-// ---------- 示例背景音乐 ----------
+// ---------- 内置免费音乐 ----------
 //
-// 生成一段可直接播放的 WAV（44.1kHz / 16bit / 单声道），
-// 由几个缓慢变化的和弦叠加而成，用作演示空间的背景音乐。
+// 这些音轨由程序实时合成（缓慢和弦 + 呼吸式音量），不依赖任何外部曲库，
+// 也不会涉及第三方版权。用于「背景音乐库」的免费曲目。
+
+type Track struct {
+	ID      string
+	Title   string
+	Mood    string
+	Seconds int
+}
+
+// Tracks 是内置音乐库；文件由 SeedAssets 写入 uploads。
+var Tracks = []Track{
+	{ID: "night", Title: "夜航", Mood: "安静 · 深夜", Seconds: 40},
+	{ID: "dawn", Title: "晨雾", Mood: "清澈 · 清晨", Seconds: 36},
+	{ID: "walk", Title: "远山", Mood: "舒展 · 行走", Seconds: 40},
+}
+
+func TrackFile(id string) string { return "music-" + id + ".wav" }
 
 const sampleRate = 44100
 
-func AmbientWAV(seconds int) []byte {
+// chordsFor 返回四个和弦（Hz）与每段时长（秒）、整体音量。
+func chordsFor(kind string) ([][]float64, int, float64) {
+	switch kind {
+	case "dawn":
+		return [][]float64{
+			{261.63, 329.63, 392.00},
+			{196.00, 261.63, 329.63},
+			{220.00, 261.63, 329.63},
+			{174.61, 220.00, 261.63},
+		}, 9, 0.15
+	case "walk":
+		return [][]float64{
+			{146.83, 185.00, 220.00},
+			{110.00, 146.83, 185.00},
+			{123.47, 146.83, 185.00},
+			{98.00, 123.47, 146.83},
+		}, 7, 0.16
+	default: // night
+		return [][]float64{
+			{110.00, 130.81, 164.81},
+			{87.31, 110.00, 130.81},
+			{98.00, 123.47, 146.83},
+			{82.41, 98.00, 123.47},
+		}, 10, 0.17
+	}
+}
+
+// AmbientTrack 合成一段循环无缝的环境音（44.1kHz / 16bit / 单声道 PCM）。
+func AmbientTrack(kind string, seconds int) []byte {
+	chords, segSec, gain := chordsFor(kind)
 	frames := sampleRate * seconds
+	seg := segSec * sampleRate
 	data := make([]byte, frames*2)
 
-	// 每个和弦持续 8 秒，音高（Hz）取自 A 小调色彩的和声
-	chords := [][]float64{
-		{220.00, 261.63, 329.63}, // Am
-		{174.61, 220.00, 261.63}, // F
-		{196.00, 246.94, 293.66}, // G
-		{164.81, 196.00, 246.94}, // Em
-	}
-	seg := 8 * sampleRate
-
 	for i := 0; i < frames; i++ {
-		// 交叉淡化两个相邻和弦，避免爆音
 		pos := float64(i) / float64(seg)
 		idx := int(pos) % len(chords)
 		next := (idx + 1) % len(chords)
-		frac := pos - math.Floor(pos)
-		mix := smoothstep(0.72, 1.0, frac)
+		mix := smoothstep(0.7, 1.0, pos-math.Floor(pos))
 
 		var v float64
 		for k, f := range chords[idx] {
@@ -128,24 +226,25 @@ func AmbientWAV(seconds int) []byte {
 		for k, f := range chords[next] {
 			v += math.Sin(2*math.Pi*f*float64(i)/sampleRate) * mix * amp(k)
 		}
-		// 缓慢的音量起伏，听感更像环境音
-		breath := 0.72 + 0.28*math.Sin(2*math.Pi*float64(i)/float64(sampleRate*14))
-		v *= breath * 0.17
 
-		// 首尾淡入淡出
+		// 呼吸：让长音有起伏，听起来不像测试音
+		breath := 0.78 + 0.22*math.Sin(2*math.Pi*float64(i)/float64(sampleRate*13))
+		v *= breath * gain
+
+		// 首尾各 1.2 秒淡入淡出，循环时不会有爆音
 		edge := 1.0
-		if i < sampleRate {
-			edge = float64(i) / sampleRate
+		fade := int(sampleRate * 1.2)
+		if i < fade {
+			edge = float64(i) / float64(fade)
 		}
-		if tail := frames - i; tail < sampleRate {
-			edge = float64(tail) / sampleRate
+		if tail := frames - i; tail < fade {
+			edge = float64(tail) / float64(fade)
 		}
 		v *= edge
 
 		s := int16(math.Max(-1, math.Min(1, v)) * 32767)
 		binary.LittleEndian.PutUint16(data[i*2:], uint16(s))
 	}
-
 	return append(wavHeader(len(data)), data...)
 }
 
@@ -169,13 +268,13 @@ func wavHeader(dataLen int) []byte {
 	copy(h[0:], "RIFF")
 	binary.LittleEndian.PutUint32(h[4:], uint32(36+dataLen))
 	copy(h[8:], "WAVEfmt ")
-	binary.LittleEndian.PutUint32(h[16:], 16)          // fmt 块长度
-	binary.LittleEndian.PutUint16(h[20:], 1)           // PCM
-	binary.LittleEndian.PutUint16(h[22:], 1)           // 单声道
-	binary.LittleEndian.PutUint32(h[24:], sampleRate)  // 采样率
-	binary.LittleEndian.PutUint32(h[28:], sampleRate*2) // 字节率
-	binary.LittleEndian.PutUint16(h[32:], 2)           // 块对齐
-	binary.LittleEndian.PutUint16(h[34:], 16)          // 位深
+	binary.LittleEndian.PutUint32(h[16:], 16)
+	binary.LittleEndian.PutUint16(h[20:], 1)
+	binary.LittleEndian.PutUint16(h[22:], 1)
+	binary.LittleEndian.PutUint32(h[24:], sampleRate)
+	binary.LittleEndian.PutUint32(h[28:], sampleRate*2)
+	binary.LittleEndian.PutUint16(h[32:], 2)
+	binary.LittleEndian.PutUint16(h[34:], 16)
 	copy(h[36:], "data")
 	binary.LittleEndian.PutUint32(h[40:], uint32(dataLen))
 	return h

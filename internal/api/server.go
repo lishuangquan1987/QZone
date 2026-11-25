@@ -25,12 +25,26 @@ type Server struct {
 	webFS    fs.FS
 	web      http.Handler
 	webIndex []byte
+	maxImage int64
+	maxAudio int64
+}
+
+// Options 是运行期可调参数。
+type Options struct {
+	MaxImage int64 // 单张图片上限（字节）
+	MaxAudio int64 // 单段音频上限（字节）
 }
 
 const sessionCookie = "qz_session"
 
-func New(db *ent.Client, uploads string, webFS fs.FS) *Server {
-	s := &Server{db: db, uploads: uploads, webFS: webFS}
+func New(db *ent.Client, uploads string, webFS fs.FS, opt Options) *Server {
+	if opt.MaxImage <= 0 {
+		opt.MaxImage = 30 << 20
+	}
+	if opt.MaxAudio <= 0 {
+		opt.MaxAudio = 50 << 20
+	}
+	s := &Server{db: db, uploads: uploads, webFS: webFS, maxImage: opt.MaxImage, maxAudio: opt.MaxAudio}
 	if webFS != nil {
 		if raw, err := fs.ReadFile(webFS, "index.html"); err == nil {
 			s.webIndex = raw
@@ -80,6 +94,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/notifications", s.auth(s.listNotifications))
 	mux.HandleFunc("POST /api/notifications/read", s.auth(s.readNotifications))
 	mux.HandleFunc("GET /api/search", s.auth(s.search))
+	mux.HandleFunc("GET /api/music/library", s.auth(s.musicLibrary))
 
 	mux.HandleFunc("POST /api/upload", s.auth(s.uploadImage))
 	mux.HandleFunc("POST /api/upload/audio", s.auth(s.uploadAudio))

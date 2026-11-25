@@ -18,12 +18,13 @@ const routes = process.argv.slice(2);
   });
 
   await page.goto(BASE + '/', { waitUntil: 'networkidle' });
-  await page.screenshot({ path: path.join(OUT, 'login.png'), fullPage: true });
+  await page.screenshot({ path: path.join(OUT, 'login.png'), fullPage: false });
 
   await page.fill('input[name=uin]', '294388344');
   await page.fill('input[name=password]', 'qzone123');
-  await page.click('#login-submit');
-  await page.waitForSelector('.hero', { timeout: 15000 });
+  await page.click('#auth-submit');
+  await page.waitForSelector('.hero, .auth-brand', { timeout: 15000 });
+  await page.waitForTimeout(800);
   await page.waitForTimeout(1200);
 
   for (const r of routes.length ? routes : ['#/home']) {
