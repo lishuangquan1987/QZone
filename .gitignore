@@ -1,0 +1,23 @@
+# 运行时数据（db.json 与上传的图片）
+/data
+
+# 构建产物
+/qzone.exe
+qzone.exe
+*.exe.tmp
+
+# 前端依赖（dist 需要提交，供 go:embed 使用）
+/web/node_modules
+/web/.vite
+
+# 验收截图
+/.qa
+
+# 从浏览器保存的参考页面（含真实页面快照，体积大且含个人信息）
+/ref
+
+# 系统
+.DS_Store
+Thumbs.db
+*.log
+web/dist/
