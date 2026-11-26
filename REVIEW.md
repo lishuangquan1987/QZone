@@ -1,7 +1,7 @@
 # 项目评审与改进清单
 
 > 评审对象：`lishuangquan1987/QZone`（Go + ent + SQLite + TypeScript 个人空间）
-> 评审时间：2026-11-26 · 文中 `文件:行号` 均指评审时的代码位置
+> 评审时间：2026-11-26 · 引用位置按「文件 + 函数」标注，行号可能与最新提交有偏移
 
 ## 结论
 
@@ -33,7 +33,7 @@
 | 8 | 浏览量可刷 | `getPost()` 每次 GET `AddViews(1)` | 同 IP + 文章 30 分钟内去重，或改用 `post_views` 明细表 |
 | 9 | 上传只信任 `Content-Type` | `upload.go` `saveUpload()` | 读前 512 字节做魔数校验（`http.DetectContentType`）；图片重编码以剥离 EXIF；生成缩略图 |
 | 10 | 无压缩、无长缓存 | `spaHandler()`、`mediaHandler()` | 静态资源加 `Cache-Control: public,max-age=31536000,immutable`（Vite 带 hash）；文本走 gzip/br；`spaHandler` 不必把整文件读进内存再写回 |
-| 11 | 没有一行测试 | 全仓 | 至少给「可见性 / 归属校验」写 `enttest` 用例——上面 3 个越权问题都出在这层 |
+| 11 | 没有一行测试 | 全仓 | 至少给「可见性 / 归属校验」写 `enttest` 用例——P0 里的 1、3 都出在这层 |
 
 ### P2 · 产品与体验
 
