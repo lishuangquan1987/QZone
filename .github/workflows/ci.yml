@@ -50,12 +50,13 @@ jobs:
         env:
           CGO_ENABLED: '0'
         run: |
+          mkdir -p dist
           go build -trimpath -ldflags="-s -w -X main.version=${{ github.sha }}" -o dist/qzone-linux-amd64 .
           ls -lh dist/
 
       - name: 冒烟测试（启动后访问首页）
         run: |
-          ./dist/qzone-linux-amd64 -addr 127.0.0.1:8099 -data /tmp/qzdata &
+          ./dist/qzone-linux-amd64 -addr 127.0.0.1:8099 -data /tmp/qzdata > /tmp/qzone.log 2>&1 &
           for i in $(seq 1 30); do
             code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8099/ || true)
             [ "$code" = "200" ] && echo "首页 200" && exit 0
