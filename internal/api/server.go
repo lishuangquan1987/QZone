@@ -14,6 +14,7 @@ import (
 
 	"qzone/ent"
 	"qzone/ent/notification"
+	"qzone/ent/photo"
 	"qzone/ent/session"
 	"qzone/ent/user"
 )
@@ -81,6 +82,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/albums", s.auth(s.listAlbums))
 	mux.HandleFunc("POST /api/albums", s.auth(s.createAlbum))
 	mux.HandleFunc("GET /api/albums/{id}", s.auth(s.getAlbum))
+	mux.HandleFunc("PATCH /api/albums/{id}", s.auth(s.updateAlbum))
 	mux.HandleFunc("DELETE /api/albums/{id}", s.auth(s.deleteAlbum))
 	mux.HandleFunc("POST /api/albums/{id}/photos", s.auth(s.addPhotos))
 	mux.HandleFunc("DELETE /api/albums/{id}/photos/{pid}", s.auth(s.deletePhoto))
@@ -101,7 +103,18 @@ func (s *Server) Handler() http.Handler {
 
 	mux.Handle("/media/", http.StripPrefix("/media/", s.mediaHandler()))
 	mux.Handle("/", s.spaHandler())
-	return mux
+	return securityHeaders(mux)
+}
+
+// securityHeaders 补几个成本极低、收益明确的响应头。
+func securityHeaders(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "SAMEORIGIN")
+		w.Header().Set("Referrer-Policy", "same-origin")
+		w.Header().Set("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+		h.ServeHTTP(w, r)
+	})
 }
 
 // ---------- 通用响应 ----------
@@ -298,9 +311,43 @@ func visible(visibility string, ownerID, viewerID int) bool {
 func (s *Server) mediaHandler() http.Handler {
 	fsrv := http.FileServer(http.Dir(s.uploads))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "public, max-age=604800")
+		// 整个站点都要求登录，媒体文件不能成为绕过权限的后门：
+		// 先验会话，再按所在相册的可见范围判断这张照片能不能给当前用户看。
+		me := s.currentUser(r)
+		if me == nil {
+			fail(w, http.StatusUnauthorized, "请先登录")
+			return
+		}
+		url := "/media/" + strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
+		if !s.mediaVisible(r.Context(), url, me.ID) {
+			fail(w, http.StatusForbidden, "没有权限查看这张图片")
+			return
+		}
+		// 同一个地址对不同用户可能结果不同，只能私有缓存
+		w.Header().Set("Cache-Control", "private, max-age=604800")
+		w.Header().Set("Vary", "Cookie")
+		// 上传的 SVG 直接打开时会执行脚本：用 sandbox 把它关进无同源的小黑屋
+		if strings.HasSuffix(strings.ToLower(r.URL.Path), ".svg") {
+			w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")
+		}
 		fsrv.ServeHTTP(w, r)
 	})
+}
+
+// mediaVisible 判断媒体地址是否对 viewer 可见。只有相册里的照片受相册可见范围约束，
+// 头像、封面等其它素材维持原样。
+func (s *Server) mediaVisible(ctx context.Context, url string, viewer int) bool {
+	p, err := s.db.Photo.Query().Where(photo.URLEQ(url)).WithAlbum().First(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return true
+		}
+		return false
+	}
+	if p.Edges.Album == nil {
+		return true
+	}
+	return visible(p.Edges.Album.Privacy, p.Edges.Album.OwnerID, viewer)
 }
 
 func (s *Server) spaHandler() http.Handler {

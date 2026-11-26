@@ -193,6 +193,64 @@ func (s *Server) getAlbum(w http.ResponseWriter, r *http.Request, me *ent.User) 
 	writeJSON(w, http.StatusOK, views[0])
 }
 
+func (s *Server) updateAlbum(w http.ResponseWriter, r *http.Request, me *ent.User) {
+	ctx := r.Context()
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		fail(w, http.StatusBadRequest, "无效的相册编号")
+		return
+	}
+	a, err := s.db.Album.Query().Where(album.ID(id)).Only(ctx)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if a.OwnerID != me.ID {
+		fail(w, http.StatusForbidden, "只能修改自己的相册")
+		return
+	}
+	var req struct {
+		Name        *string `json:"name"`
+		Description *string `json:"description"`
+		Privacy     *string `json:"privacy"`
+	}
+	if err := decode(r, &req); err != nil {
+		fail(w, http.StatusBadRequest, "请求格式有误")
+		return
+	}
+	upd := s.db.Album.UpdateOneID(id)
+	if req.Name != nil {
+		name := strings.TrimSpace(*req.Name)
+		if name == "" {
+			fail(w, http.StatusBadRequest, "相册名称不能为空")
+			return
+		}
+		upd.SetName(clip(name, 24))
+	}
+	if req.Description != nil {
+		upd.SetDescription(clip(strings.TrimSpace(*req.Description), 120))
+	}
+	if req.Privacy != nil {
+		p := *req.Privacy
+		if p != "public" && p != "unlisted" && p != "private" {
+			fail(w, http.StatusBadRequest, "可见范围只能是 public / unlisted / private")
+			return
+		}
+		upd.SetPrivacy(p)
+	}
+	a, err = upd.Save(ctx)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	views, err := s.albumViews(ctx, []*ent.Album{a}, me.ID, false)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, views[0])
+}
+
 func (s *Server) deleteAlbum(w http.ResponseWriter, r *http.Request, me *ent.User) {
 	ctx := r.Context()
 	id, err := strconv.Atoi(r.PathValue("id"))
@@ -319,12 +377,18 @@ func (s *Server) deletePhoto(w http.ResponseWriter, r *http.Request, me *ent.Use
 		writeErr(w, err)
 		return
 	}
-	if a.Cover == "" {
-		if first, err := s.db.Photo.Query().
-			Where(photo.HasAlbumWith(album.ID(aid))).
-			Order(ent.Asc(photo.FieldCreatedAt)).First(ctx); err == nil {
-			_, _ = s.db.Album.UpdateOneID(aid).SetCover(first.URL).Save(ctx)
+	// 封面跟着照片走：删掉的正好是封面就换一张，相册空了就清空，
+	// 否则列表里会留下一个指向已删文件的破图。
+	first, ferr := s.db.Photo.Query().
+		Where(photo.HasAlbumWith(album.ID(aid))).
+		Order(ent.Asc(photo.FieldCreatedAt)).First(ctx)
+	upd := s.db.Album.UpdateOneID(aid)
+	if ferr == nil {
+		if a.Cover != first.URL {
+			_, _ = upd.SetCover(first.URL).Save(ctx)
 		}
+	} else if a.Cover != "" {
+		_, _ = upd.SetCover("").Save(ctx)
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

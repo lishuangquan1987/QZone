@@ -123,11 +123,18 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	u, err := s.db.User.Query().Where(user.Uin(strings.TrimSpace(req.UIN))).Only(ctx)
+	uin := strings.TrimSpace(req.UIN)
+	limitKey := clientIP(r) + "|" + strings.ToLower(uin)
+	if !loginLimiter.allow(limitKey, 8, 5*time.Minute) {
+		fail(w, http.StatusTooManyRequests, "尝试次数过多，请 5 分钟后再试")
+		return
+	}
+	u, err := s.db.User.Query().Where(user.Uin(uin)).Only(ctx)
 	if err != nil || !checkPassword(u.PasswordHash, req.Password) {
 		fail(w, http.StatusUnauthorized, "空间号或密码不正确")
 		return
 	}
+	loginLimiter.reset(limitKey)
 	if err := s.issueSession(ctx, w, u); err != nil {
 		writeErr(w, err)
 		return
