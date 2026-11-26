@@ -2,6 +2,11 @@
 
 一个可直接运行的**多用户个人主页 / 博客系统**：Markdown 写作、图片真实上传、背景音乐真实播放，界面按现代博客设计（而非复刻 QQ 空间的旧版式）。
 
+[![CI](https://github.com/lishuangquan1987/QZone/actions/workflows/ci.yml/badge.svg)](https://github.com/lishuangquan1987/QZone/actions/workflows/ci.yml)
+[![Demo](https://github.com/lishuangquan1987/QZone/actions/workflows/pages.yml/badge.svg)](https://lishuangquan1987.github.io/QZone/)
+
+**在线演示**：<https://lishuangquan1987.github.io/QZone/> —— 由 GitHub Actions 推送到 GitHub Pages 的静态演示版，登录即用（`294388344 / qzone123`），数据只存在你自己的浏览器里。
+
 > 早期版本是对 `user.qzone.qq.com/294388344` 的功能复刻；本版按需求重写为「个人主页方向」：说说与日志合并成文章，数据层换成 ent + 纯 Go SQLite，开放注册，每个账号的数据彼此隔离。
 
 ---
@@ -49,6 +54,50 @@ cd web && npm run dev        # 终端 B → http://localhost:5173
 
 ---
 
+## 部署
+
+仓库自带三条 GitHub Actions 流水线，`.github/workflows/` 下可查：
+
+| 工作流 | 触发 | 产出 |
+| --- | --- | --- |
+| `ci.yml` | push / PR | 前端构建 + `go vet` + `go test` + 静态编译 + 启动冒烟测试 + 镜像可构建性 |
+| `pages.yml` | push 到 `main`（`web/**` 变更）/ 手动 | **GitHub Pages 静态演示站** |
+| `release.yml` | 推 `v*` tag | 5 个平台的单文件二进制（zip）+ `ghcr.io` 多架构镜像 |
+
+### 方式一：Docker（推荐自建）
+
+```bash
+docker compose up -d            # 数据落在 ./data，端口 8080
+# 或
+docker run -d -p 8080:8080 -v $PWD/data:/data ghcr.io/lishuangquan1987/qzone:latest
+```
+
+镜像基于 `alpine`，`CGO_ENABLED=0` 静态链接，单进程单文件，数据卷挂 `/data` 即可迁移。
+
+### 方式二：单文件二进制
+
+从 [Releases](https://github.com/lishuangquan1987/QZone/releases) 下载对应平台的 zip，解压后直接运行：
+
+```bash
+./qzone -addr :8080 -data ./data
+```
+
+前端已经通过 `go:embed` 打进二进制，不需要额外资源文件。
+
+### 方式三：GitHub Pages（静态演示）
+
+`pages.yml` 用 `VITE_DEMO=1` 构建，前端会自动切换到**浏览器内的模拟后端**（`web/src/demo.ts`），把同一套界面和交互跑在 localStorage 上：
+
+- 可以注册、登录、写文章、传图、建相册、留言、点赞、搜索，刷新后数据仍在
+- 没有服务端，照片以 dataURL 存在浏览器里；换浏览器 / 清缓存 = 一份新的演示数据
+- 适合给别人看「长什么样」，不适合放真实数据
+
+启用步骤：仓库 **Settings → Pages → Source 选 `GitHub Actions`**，然后 push 一次或手动运行 `Deploy demo to Pages`。
+
+> 为什么不能直接把 Go 服务放到 Pages？Pages 只托管静态文件，没有进程、没有文件系统，SQLite 和上传目录都无处可放。要真实数据请用方式一 / 二。
+
+---
+
 ## 目录
 
 ```
@@ -75,6 +124,7 @@ cd web && npm run dev        # 终端 B → http://localhost:5173
 │   ├── md.ts                # 安全的 Markdown 渲染
 │   ├── music.ts             # 背景音乐播放器
 │   ├── styles.css           # 现代博客版式与主题
+│   ├── demo.ts              # 静态演示后端（VITE_DEMO=1 时启用，Pages 用）
 │   └── views/               # auth / home / posts / post / editor / albums …
 ├── tools/                   # Playwright 验收脚本（可选）
 └── data/                    # 运行时生成：qzone.db + uploads/
@@ -115,7 +165,13 @@ cd web && npm run dev        # 终端 B → http://localhost:5173
 
 **内容（说说与日志已合并）**
 - 一篇文章 = 标题（可空）+ Markdown 正文 + 封面 + 分类 + 配图 + 可见范围（公开 / 不公开列出 / 仅自己）
-- 编辑器（CSDN 风格）：工具栏分组（标题 / 强调 / 引用与代码 / 列表 / 链接与插图 / 表格与分割线）、编辑 · 分屏 · 预览三种视图、`Ctrl+B/I/K` 快捷键、`Ctrl+S` 保存
+- **全宽写作工作台**：整页铺满（不再有 1120px 内容栏 + 侧栏挤压），编辑区随窗口高度撑满，页面不滚动
+  - 编辑 / 分屏 / 预览三种视图，**分屏比例可拖拽**（双击复位），状态记在 localStorage
+  - 左侧**大纲**抽屉：按 `#` 级标题生成，点击跳到对应段落；右侧**设置**抽屉：封面、分类、可见范围、置顶
+  - 分屏时左右**滚动同步**；`Tab / Shift+Tab` 整行缩进；回车自动续写 `-` `1.` `- [ ]` `>`，空项再回车退出列表
+  - 工具栏分组（标题 / 强调 / 引用与代码 / 列表 / 链接与插图 / 表格与分割线）、`Ctrl+B/I/E/K`、`Ctrl+1/2/3`、`Ctrl+Shift+C`、`Ctrl+/` 快捷键面板
+  - 所有插入走 `execCommand('insertText')`，保留浏览器原生撤销栈；`F11` 全屏写作（Fullscreen API）
+  - 底部状态栏：字数（中文按字、英文按词）、阅读时长、光标行列、保存状态
 - **直接粘贴截图**（`Ctrl+V`）或把图片拖进编辑区即可插图；图片在浏览器端先压缩再上传
 - 草稿每 1.2 秒自动存本地，重进编辑器会提示「恢复 / 丢弃」
 - 详情页：衬线标题排版、代码块 / 引用 / 表格 / 图片样式、阅读时长、浏览量、点赞、评论（支持回复与删除）
@@ -213,8 +269,11 @@ node tools/e2e.cjs
 
 ## 已知边界
 
+> 完整的评审与待办见 [REVIEW.md](REVIEW.md)；其中「`/media/` 目录绕过权限」是已知的 P0 项，自建部署前请先处理。
+
 - SQLite 单写者：连接池限制为 1，适合单机；多实例部署需换 PostgreSQL（ent 支持，改驱动即可）。
 - 没有实时推送，消息需刷新页面获取。
-- 没有富文本粘贴、草稿自动保存、协作编辑。
+- 没有富文本粘贴（粘贴的是图片，不是 Word/网页样式）、没有多端实时协作。
+- 草稿只存在浏览器 localStorage，换设备不同步。
 - 图片未做缩略图与压缩，原图直出；大量高清图时建议接对象存储 + 图片处理。
 - 示例素材（头像 / 封面 / 照片）是程序生成的渐变 SVG，仅用于演示。

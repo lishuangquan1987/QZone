@@ -1,0 +1,7 @@
+.git
+.github
+data
+qa
+*.exe
+**/node_modules
+**/.vite

@@ -61,8 +61,8 @@ func Run(ctx context.Context, db *ent.Client, uploads string) error {
 		SetVip(9).
 		SetTheme("aurora").
 		SetMood("晴").
-		SetBgmTitle("Ambient · 程序生成的环境音").
-		SetBgmURL("/media/seed/ambient.wav").
+		SetBgmTitle("夜航 · 程序生成的环境音").
+		SetBgmURL("/media/seed/" + media.TrackFile("night")).
 		SetTags([]string{"写作", "摄影", "徒步", "手冲咖啡"}).
 		SetSignStreak(37).
 		SetSunValue(1280).

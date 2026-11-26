@@ -21,6 +21,9 @@ import (
 //go:embed all:web/dist
 var webDist embed.FS
 
+// version 由构建参数注入：-ldflags "-X main.version=v1.2.0"
+var version = "dev"
+
 func main() {
 	addr := flag.String("addr", ":8080", "监听地址")
 	dataDir := flag.String("data", "data", "数据与上传目录")
@@ -66,7 +69,7 @@ func main() {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
-	log.Printf("个人空间已启动: http://localhost%s", *addr)
+	log.Printf("个人空间 %s 已启动: http://localhost%s", version, *addr)
 	log.Printf("演示账号: 294388344 / qzone123 · linwan / qzone123")
 	if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("服务退出: %v", err)

@@ -1,4 +1,5 @@
 import './styles.css';
+import { DEMO } from './env';
 import { api, ApiError } from './api';
 import { state, setBoot, me, applyTheme, unread } from './state';
 import { bgm } from './music';
@@ -188,6 +189,10 @@ async function renderRoute(): Promise<void> {
   if (!view) return;
   const { path, query } = parseHash();
   const hit = matchRoute(path);
+  // 写作页会给 body 加 writer-mode（锁滚动），换路由时先复位
+  if (!path.startsWith('/write') && !path.startsWith('/edit/')) {
+    document.body.classList.remove('writer-mode');
+  }
 
   document.querySelectorAll<HTMLElement>('[data-nav]').forEach((el) => {
     el.classList.toggle('active', el.dataset.nav === hit?.def.nav);
@@ -227,6 +232,7 @@ window.addEventListener('hashchange', () => void renderRoute());
 window.addEventListener('qz:expired', () => showAuth());
 
 (async function start() {
+  if (DEMO) void import('./demo').then((m) => m.demoNotice());
   if (await boot()) mountShell();
   else showAuth();
 })();

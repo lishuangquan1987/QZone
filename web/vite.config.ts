@@ -2,6 +2,8 @@ import { defineConfig } from 'vite';
 
 // 开发期把接口与媒体请求代理到 Go 服务（默认 :8080）。
 export default defineConfig({
+  // GitHub Pages 部署在 /<repo>/ 子路径下，由工作流传入 VITE_BASE
+  base: process.env.VITE_BASE || '/',
   server: {
     port: 5173,
     proxy: {

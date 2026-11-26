@@ -49,7 +49,8 @@ func (s *Server) listPosts(w http.ResponseWriter, r *http.Request, me *ent.User)
 
 	query := s.db.Post.Query().WithAuthor().Where(post.HasAuthorWith(user.ID(owner.ID)))
 	if owner.ID != me.ID {
-		query = query.Where(post.VisibilityNEQ("private"))
+		// 「不公开列出」= 只有拿到链接的人能看，不应出现在别人的列表里
+		query = query.Where(post.VisibilityEQ("public"))
 	}
 	if kw := strings.TrimSpace(q.Get("q")); kw != "" {
 		query = query.Where(post.Or(

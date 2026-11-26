@@ -72,6 +72,9 @@ const ICONS: Record<string, string> = {
   codeInline: '<path d="M9 7.5L4.5 12 9 16.5"/><path d="M15 7.5L19.5 12 15 16.5"/>',
   codeBlock: '<rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="M9.5 10.5L7.5 12l2 1.5M14.5 10.5l2 1.5-2 1.5"/>',
   task: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12.2l2.6 2.6L16 9"/>',
+  expand: '<path d="M9 4.5H4.5V9M15 4.5h4.5V9M15 19.5h4.5V15M9 19.5H4.5V15"/>',
+  compress: '<path d="M4.5 9H9V4.5M19.5 9H15V4.5M19.5 15H15v4.5M4.5 15H9v4.5"/>',
+  outline: '<path d="M4 6h16M4 12h10.5M4 18h7"/>',
 };
 
 export function icon(name: string, size = 16): string {

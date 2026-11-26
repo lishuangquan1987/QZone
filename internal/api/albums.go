@@ -119,7 +119,8 @@ func (s *Server) listAlbums(w http.ResponseWriter, r *http.Request, me *ent.User
 	}
 	q := s.db.Album.Query().Where(album.HasOwnerWith(user.ID(owner.ID)))
 	if owner.ID != me.ID {
-		q = q.Where(album.PrivacyNEQ("private"))
+		// 与文章一致：不公开列出的相册只能通过链接访问，不进别人的列表
+		q = q.Where(album.PrivacyEQ("public"))
 	}
 	rows, err := q.Order(ent.Desc(album.FieldCreatedAt)).All(ctx)
 	if err != nil {

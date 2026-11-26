@@ -1,0 +1,64 @@
+# 把站点部署到 GitHub Pages（静态演示模式）。
+#
+# 说明：本项目的正式玩法是「Go 服务 + SQLite」，Pages 只能放静态文件。
+# 这个工作流用 VITE_DEMO=1 构建，前端会切换到浏览器内的模拟后端（localStorage），
+# 因此 Pages 上是一个功能完整、可登录可写作的演示站，数据只存在访问者自己的浏览器里。
+# 需要真实数据 / 多用户时，用 release.yml 产出的镜像部署到自己的服务器。
+name: Deploy demo to Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: 构建静态演示站
+        working-directory: web
+        env:
+          VITE_DEMO: '1'
+          # 项目页是 https://<user>.github.io/<repo>/；<user>.github.io 仓库部署在根路径
+          VITE_BASE: ${{ endsWith(github.event.repository.name, '.github.io') && '/' || format('/{0}/', github.event.repository.name) }}
+        run: |
+          npm ci
+          npm run build
+          # 代码用 hash 路由，仍补一个 404 兜底
+          cp dist/index.html dist/404.html
+          touch dist/.nojekyll
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -138,6 +138,10 @@ export interface Theme {
   accent: string;
 }
 
+import { DEMO } from './env';
+
+export { DEMO };
+
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -147,6 +151,19 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  // 静态演示模式：请求交给浏览器内的模拟后端（GitHub Pages 托管时使用）
+  if (DEMO) {
+    // 演示后端单独成 chunk，正式部署不会加载
+    const { demoRequest } = await import('./demo');
+    const res = await demoRequest(path, init);
+    if (res.status === 401) {
+      window.dispatchEvent(new CustomEvent('qz:expired'));
+      throw new ApiError(401, (res.body as { error?: string }).error ?? '登录状态已失效');
+    }
+    if (res.status >= 400) throw new ApiError(res.status, (res.body as { error?: string }).error ?? '请求失败');
+    return res.body as T;
+  }
+
   const headers = new Headers(init.headers);
   if (init.body && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json');
   let res: Response;

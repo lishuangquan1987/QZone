@@ -1,0 +1,12 @@
+services:
+  qzone:
+    image: ghcr.io/lishuangquan1987/qzone:latest
+    # 本地改造时改成 build: . 即可直接构建
+    container_name: qzone
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      - TZ=Asia/Shanghai
+    restart: unless-stopped

@@ -252,7 +252,8 @@ func (s *Server) bootstrap(w http.ResponseWriter, r *http.Request, me *ent.User)
 // ---------- 统计 ----------
 
 func (s *Server) statsFor(ctx context.Context, u *ent.User, viewerID int) (posts, journals, photos, messages, today int, err error) {
-	visiblePosts := post.Or(post.VisibilityNEQ("private"), post.AuthorID(viewerID))
+	// 统计口径与列表一致：别人只看得到 public，本人看全部
+	visiblePosts := post.Or(post.VisibilityEQ("public"), post.AuthorID(viewerID))
 
 	posts, err = s.db.Post.Query().
 		Where(post.HasAuthorWith(user.ID(u.ID)), visiblePosts).Count(ctx)
@@ -267,7 +268,7 @@ func (s *Server) statsFor(ctx context.Context, u *ent.User, viewerID int) (posts
 	photos, err = s.db.Photo.Query().
 		Where(photo.HasAlbumWith(
 			album.HasOwnerWith(user.ID(u.ID)),
-			album.Or(album.PrivacyNEQ("private"), album.HasOwnerWith(user.ID(viewerID))),
+			album.Or(album.PrivacyEQ("public"), album.HasOwnerWith(user.ID(viewerID))),
 		)).Count(ctx)
 	if err != nil {
 		return
