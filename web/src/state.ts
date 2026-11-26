@@ -39,9 +39,9 @@ export function setUnread(n: number): void {
   });
 }
 
-/** 应用主题：写入 data-theme 与强调色。 */
+/** 应用强调色主题。深浅外观由 CSS 从 --theme-accent 派生，这里只交原始色值。 */
 export function applyTheme(id: string): void {
   const theme = themes().find((t) => t.id === id) ?? themes()[0];
   document.documentElement.dataset.theme = theme?.id ?? 'aurora';
-  if (theme) document.documentElement.style.setProperty('--accent', theme.accent);
+  if (theme) document.documentElement.style.setProperty('--theme-accent', theme.accent);
 }

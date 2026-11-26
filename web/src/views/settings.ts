@@ -1,8 +1,15 @@
 import { api } from '../api';
 import { bgm } from '../music';
 import { applyTheme, me, setMe, themes } from '../state';
+import { getMode, setMode, type Mode } from '../theme';
 import { esc, icon, toast } from '../ui';
 import type { ViewCtx } from '../types';
+
+const APPEARANCES: { id: Mode; name: string; icon: string }[] = [
+  { id: 'light', name: '浅色', icon: 'sun' },
+  { id: 'dark', name: '深色', icon: 'moon' },
+  { id: 'auto', name: '跟随系统', icon: 'monitor' },
+];
 
 const TABS = [
   { key: 'profile', label: '个人档' },
@@ -45,6 +52,17 @@ export async function renderSettings(root: HTMLElement, ctx: ViewCtx): Promise<v
         <input type="file" id="cover-file" accept="image/*" hidden>
       </label>
 
+      <h2 class="setting-title">外观</h2>
+      <p class="setting-hint">深色模式适合夜间写作；「跟随系统」会随设备的浅色 / 深色自动切换。这个偏好只保存在当前浏览器，不跟账号走。</p>
+      <div class="theme-grid" id="appearance-grid">
+        ${APPEARANCES.map(
+          (a) => `<button class="theme-card ${getMode() === a.id ? 'active' : ''}" data-appearance="${a.id}">
+            <span class="mode-swatch">${icon(a.icon, 14)}</span>
+            <span>${a.name}</span>
+          </button>`,
+        ).join('')}
+      </div>
+
       <h2 class="setting-title">主题配色</h2>
       <p class="setting-hint">主题会改变链接、按钮与强调色，立刻生效。</p>
       <div class="theme-grid">
@@ -71,6 +89,14 @@ export async function renderSettings(root: HTMLElement, ctx: ViewCtx): Promise<v
       } catch (err) {
         toast((err as Error).message, 'err');
       }
+    });
+
+    body.querySelectorAll<HTMLElement>('[data-appearance]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        setMode(btn.dataset.appearance as Mode);
+        body.querySelectorAll('[data-appearance]').forEach((x) => x.classList.remove('active'));
+        btn.classList.add('active');
+      });
     });
 
     body.querySelectorAll<HTMLElement>('[data-theme]').forEach((btn) => {

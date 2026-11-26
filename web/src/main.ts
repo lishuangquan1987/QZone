@@ -3,6 +3,7 @@ import { DEMO } from './env';
 import { api, ApiError } from './api';
 import { state, setBoot, me, applyTheme, unread } from './state';
 import { bgm } from './music';
+import { bindThemeToggle, themeToggleHTML } from './theme';
 import { avatarHTML, esc, icon, toast } from './ui';
 import { renderAuth } from './views/auth';
 import { renderHome } from './views/home';
@@ -115,6 +116,7 @@ function mountShell(): void {
 
       <div class="head-actions">
         <a class="btn btn-primary btn-sm write-btn" href="#/write">${icon('pen', 14)}<span>写文章</span></a>
+        ${themeToggleHTML('theme-toggle', 17)}
         <a class="icon-btn badge-host" href="#/messages" title="消息">
           ${icon('bell', 18)}<i class="badge" data-unread ${unread() ? '' : 'hidden'}>${unread()}</i>
         </a>
@@ -157,6 +159,8 @@ function mountShell(): void {
     const q = String(new FormData(search).get('q') ?? '').trim();
     if (q) location.hash = `#/search?q=${encodeURIComponent(q)}`;
   });
+
+  bindThemeToggle(document, 'theme-toggle');
 
   const chip = document.getElementById('user-chip')!;
   chip.addEventListener('click', (e) => {

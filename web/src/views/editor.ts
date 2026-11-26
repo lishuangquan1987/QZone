@@ -2,6 +2,7 @@ import { api, type PostView } from '../api';
 import { mb, prepareImage } from '../image';
 import { renderMarkdown } from '../md';
 import { esc, icon, toast } from '../ui';
+import { bindThemeToggle, themeToggleHTML } from '../theme';
 import type { ViewCtx } from '../types';
 
 const CATEGORIES = ['随笔', '城市', '旅行', '技术', '阅读', '生活'];
@@ -49,7 +50,11 @@ export async function renderEditor(root: HTMLElement, ctx: ViewCtx): Promise<voi
 
   teardown?.();
   const ac = new AbortController();
-  teardown = () => ac.abort();
+  let offTheme: (() => void) | null = null;
+  teardown = () => {
+    ac.abort();
+    offTheme?.();
+  };
 
   let cover = existing?.cover ?? '';
   let images = existing?.images ?? [];
@@ -74,6 +79,7 @@ export async function renderEditor(root: HTMLElement, ctx: ViewCtx): Promise<voi
         <button class="wr-ibtn wr-only-mobile" id="btn-eye" title="预览">${icon('eye', 16)}</button>
         <button class="wr-ibtn" id="btn-side" title="封面与可见范围">${icon('settings', 16)}</button>
         <button class="wr-ibtn" id="btn-full" title="全屏写作（F11）">${icon('expand', 15)}</button>
+        ${themeToggleHTML('btn-theme', 16, 'wr-ibtn')}
         <button class="wr-ibtn" id="btn-help" title="快捷键（Ctrl+/）">?</button>
         <button class="btn btn-primary btn-sm" id="save-btn">${icon('check', 13)} ${editId ? '保存修改' : '发布'}</button>
       </div>
@@ -229,6 +235,8 @@ export async function renderEditor(root: HTMLElement, ctx: ViewCtx): Promise<voi
   </div>`;
 
   const q = <T extends Element>(sel: string) => root.querySelector<T>(sel)!;
+  offTheme = bindThemeToggle(root, 'btn-theme');
+
   const title = q<HTMLInputElement>('#title');
   const content = q<HTMLTextAreaElement>('#content');
   const preview = q<HTMLElement>('#preview');

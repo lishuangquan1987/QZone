@@ -43,7 +43,7 @@
 | 13 | 相册生成缩略图（WebP，宽 480） | 现在首屏直出原图，一屏 9 张就是几十 MB |
 | 14 | 消息用 SSE 推送未读数 | 已有通知表，加一个 `/api/events` 长连接即可，代码量很小 |
 | 15 | RSS / sitemap / Open Graph | 个人博客的传播入口，目前分享出去是白卡片 |
-| 16 | 深色模式 | 主题只换强调色，`--bg/--card/--ink` 还是硬编码一套 |
+| 16 | ~~深色模式~~ **已实现** | 原先主题只换强调色，`--bg/--card/--ink` 是写死的一套；现收敛成语义变量 + `html[data-appearance='dark']` 一套覆盖，见「四、深色外观」 |
 | 17 | 一键导出 | SQLite 文件好备份，但缺「文章 Markdown + 媒体 zip」的导出 |
 | 18 | 可访问性 | 视图切换按钮缺 `aria-pressed`，Toast 缺 `role="status"`，`modal` 无焦点陷阱 |
 | 19 | 草稿箱 | 草稿只在 localStorage，换设备就没了 |
@@ -56,7 +56,14 @@
 | 文件 | 改动 |
 | --- | --- |
 | `web/src/views/editor.ts` | 编辑器整页重写（见下节） |
-| `web/src/styles.css` | 删除旧 `.editor-*` 样式，新增 `.wr-*` 工作台样式（含移动端） |
+| `web/src/styles.css` | 删除旧 `.editor-*` 样式，新增 `.wr-*` 工作台样式（含移动端）；颜色收敛为语义变量（`--surface / --sunken / --raised / --faint / --code-*`），新增深色覆盖 |
+| `web/src/theme.ts` | **新增**：外观模式（浅色 / 深色 / 跟随系统），写 `html[data-appearance]`、同步 `color-scheme` 与 `theme-color` |
+| `web/src/state.ts` | `applyTheme` 只写 `--theme-accent`，强调色阶交给 CSS 按深浅派生 |
+| `web/src/views/settings.ts` | 装扮页新增「外观」三选一 |
+| `web/src/main.ts` / `views/auth.ts` / `views/editor.ts` | 页头、登录页、写作页顶栏各加一个切换按钮 |
+| `web/index.html` | 首屏前内联预置外观，避免深色用户白闪 |
+| `web/src/components.ts` | 修无封面文章卡片留 300px 空白（改为不渲染封面区） |
+| `web/src/styles.css` | 修裸 `textarea`（留言 / 评论）没有背景色，深色下露出 UA 灰底 |
 | `web/src/demo.ts` | **新增**：浏览器内模拟后端，`VITE_DEMO=1` 时接管全部 `/api/*` |
 | `web/src/api.ts` | 请求层支持演示后端；导出 `DEMO` 开关 |
 | `web/src/main.ts` | 路由切换时复位 `writer-mode`；打印演示提示 |
@@ -116,7 +123,24 @@
 
 ---
 
-## 四、托管方案
+## 四、深色外观
+
+不是「加一层反色滤镜」，而是把颜色收成一套变量，再用一套深色值覆盖。
+
+| 做法 | 说明 |
+| --- | --- |
+| 语义化 | 新增 `--surface`（控件底）/ `--surface-2`（浅底）/ `--sunken`（分段器凹槽）/ `--raised`（凹槽里的选中块）/ `--faint`（极弱文字）/ `--on-accent`、`--on-ink`（主色上的文字）/ `--code-*`、`--pre-*` |
+| 强调色派生 | `--accent-ink`、`--accent-soft`、深色下的 `--accent` 全部由 `--theme-accent` 用 `color-mix` 算出，五套主题自动适配，不用维护 5×2 份色值 |
+| 反相处理 | Toast（深底白字 → 浅底深字）、`accent-soft` 语义块（置顶 / 点赞 / 通知类别）、草稿条、`pre` 代码块，各自单独设深色值而不是简单反转 |
+| 原生控件 | `color-scheme: dark` 让滚动条、日期选择、自动填充底色一起变暗；`input:-webkit-autofill` 单独压掉 Chrome 的白底 |
+| 首屏 | `index.html` 里 6 行内联脚本先读 `localStorage` 定下 `data-appearance`，避免深色用户先看到一帧白 |
+| 切换入口 | 页头、写作页顶栏、登录页右上角三个按钮；`设置 → 装扮` 里可明确选「跟随系统」 |
+
+一个坑值得记下来：`.wr-body` 原来就用 `data-mode="split|edit|preview"` 表示视图模式，所以外观属性命名为 `data-appearance`，避免两套状态抢同一个属性名。
+
+---
+
+## 五、托管方案
 
 | 方案 | 能跑什么 | 数据 | 适用 |
 | --- | --- | --- | --- |
@@ -130,7 +154,7 @@
 
 ---
 
-## 五、验证记录
+## 六、验证记录
 
 | 项 | 方式 | 结果 |
 | --- | --- | --- |
@@ -138,11 +162,13 @@
 | 列表续行 / Tab / 撤销 / 分屏拖拽 | Playwright 断言 | 通过（`- 第一项↵第二项↵↵` → 自动续行并退出列表；拖拽 756px → 556px） |
 | 大纲跳转 | 3,457 字长文，5 个标题 | 大纲 5 项全部识别，点击后 `textarea.scrollTop` 1612 → 1758 |
 | 演示站 12 个路由 | Playwright 逐页访问 | 全部渲染，控制台 0 报错；写作 → 发布 → 刷新 → 评论闭环通过 |
+| 深色外观 | 14 个路由 × 深浅两套，脚本扫描 `#view` 内近白大块 | 无浅色残留；强调色采样：深色墨绿 `#899f92`、深色陶土 `#c09583`，配深色文字对比达标 |
+| 跟随系统 | `colorScheme: dark/light` 两个上下文 | 分别解析为 `dark` / `light`；清除偏好后自动跟随 |
 | 镜像 | `docker build` + `docker run -v ...:/data` | 首页 200，首次启动自动播种 |
 | CI / Pages / Release | 本地无法执行 | 语法与步骤已对齐官方 action 版本，首次推送后在 Actions 页确认 |
 
 ---
 
-## 六、如果只做一件事
+## 七、如果只做一件事
 
 把 **`/media/` 的权限**补上。现在「私密相册」的安全性，取决于别人猜不到 `a-campus.svg` 这种文件名——而示例素材的文件名是固定且可枚举的。改法不复杂：给媒体 URL 加 `?sig=<hmac>&exp=<ts>`，或让 `/media/<uin>/...` 走一次会话校验。

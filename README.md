@@ -123,7 +123,8 @@ docker run -d -p 8080:8080 -v $PWD/data:/data ghcr.io/lishuangquan1987/qzone:lat
 │   ├── api.ts               # 类型化接口客户端
 │   ├── md.ts                # 安全的 Markdown 渲染
 │   ├── music.ts             # 背景音乐播放器
-│   ├── styles.css           # 现代博客版式与主题
+│   ├── styles.css           # 现代博客版式、浅色 / 深色两套变量
+│   ├── theme.ts             # 外观模式（浅色 / 深色 / 跟随系统）
 │   ├── demo.ts              # 静态演示后端（VITE_DEMO=1 时启用，Pages 用）
 │   └── views/               # auth / home / posts / post / editor / albums …
 ├── tools/                   # Playwright 验收脚本（可选）
@@ -140,6 +141,7 @@ docker run -d -p 8080:8080 -v $PWD/data:/data ghcr.io/lishuangquan1987/qzone:lat
 | --- | --- |
 | 强调色 | 单一强调色，默认松墨 `#2f5d50`；其余四套主题（陶土 / 靛青 / 墨黑 / 绛粉）同样为低饱和 |
 | 中性色 | 统一暖灰：`#1b1a17` / `#4b4741` / `#857e73`，纸面 `#f7f4ee`，卡片 `#fffdfa` |
+| 深色 | 单独一套中性色（纸面 `#131412`、卡片 `#191a17`、正文 `#ece8de`），强调色不重配，由原色 `color-mix` 提亮派生 |
 | 圆角 | 卡片 14 / 控件 8 / 媒体 10 / 通栏 16 / 胶囊 999，不混用其他数值 |
 | 字体 | 标题宋体（Songti SC / Noto Serif SC），正文系统无衬线；数字 `tabular-nums` |
 | 层次 | 卡片靠 1px 暖色描边 + 极浅投影分层，不用渐变与毛玻璃 |
@@ -195,6 +197,10 @@ docker run -d -p 8080:8080 -v $PWD/data:/data ghcr.io/lishuangquan1987/qzone:lat
 - **关于 QQ 音乐**：其播放接口需要签名与版权授权（实测搜索返回 `code 2001`），本项目不抓取；如需自有曲库可在此基础上接授权 API，接口层已把「曲目来源」抽象成 `url + title`
 
 **装扮**
+- **外观三档**：浅色 / 深色 / 跟随系统。页头、写作页顶栏、登录页各有一个切换按钮，`设置 → 装扮` 里可三选一
+  - 深色不另做一套配色：五套强调色统一用 `color-mix` 在深色下提亮，`accent-soft` 同步压深，换主题不用改第二份样式
+  - `color-scheme` 一起切换，滚动条、自动填充、原生控件跟着变暗；首屏由内联脚本预置，深色用户不会看到白闪
+  - 偏好存在 `localStorage`（不跟账号走：手机想深色、台式想浅色是常事）
 - 5 套主题（极光 / 余烬 / 森野 / 墨色 / 樱雾），实时切换并持久化
 - 封面、头像、音乐均可替换
 

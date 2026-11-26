@@ -1,10 +1,12 @@
 import { api } from '../api';
 import { esc, icon, toast } from '../ui';
+import { bindThemeToggle, themeToggleHTML } from '../theme';
 
 /** 登录 / 注册：同一页切换，注册后自动登录。 */
 export function renderAuth(root: HTMLElement, onSuccess: () => void | Promise<void>): void {
   root.innerHTML = `
   <div class="auth">
+    ${themeToggleHTML('auth-theme', 17)}
     <section class="auth-brand">
       <div class="auth-brand-inner">
         <div class="auth-logo">${icon('pen', 20)}</div>
@@ -23,8 +25,8 @@ export function renderAuth(root: HTMLElement, onSuccess: () => void | Promise<vo
     <section class="auth-panel">
       <div class="auth-card">
         <div class="auth-tabs">
-          <button class="auth-tab active" data-mode="login">登录</button>
-          <button class="auth-tab" data-mode="register">注册</button>
+          <button class="auth-tab active" data-tab="login">登录</button>
+          <button class="auth-tab" data-tab="register">注册</button>
         </div>
 
         <form id="auth-form" class="auth-form">
@@ -54,15 +56,17 @@ export function renderAuth(root: HTMLElement, onSuccess: () => void | Promise<vo
     </section>
   </div>`;
 
+  bindThemeToggle(root, 'auth-theme');
+
   const form = root.querySelector<HTMLFormElement>('#auth-form')!;
   const submit = root.querySelector<HTMLButtonElement>('#auth-submit')!;
   const hint = root.querySelector<HTMLElement>('#auth-hint')!;
   const tabs = Array.from(root.querySelectorAll<HTMLElement>('.auth-tab'));
   let mode: 'login' | 'register' = 'login';
 
-  const setMode = (m: 'login' | 'register') => {
+  const setAuthTab = (m: 'login' | 'register') => {
     mode = m;
-    tabs.forEach((t) => t.classList.toggle('active', t.dataset.mode === m));
+    tabs.forEach((t) => t.classList.toggle('active', t.dataset.tab === m));
     root.querySelectorAll<HTMLElement>('[data-only="register"]').forEach((el) => {
       el.hidden = m !== 'register';
     });
@@ -73,11 +77,11 @@ export function renderAuth(root: HTMLElement, onSuccess: () => void | Promise<vo
       m === 'login' ? '还没有账号？点上面的「注册」，30 秒就能开通。' : '空间号将作为你的主页地址，注册后不可修改。';
   };
 
-  tabs.forEach((t) => t.addEventListener('click', () => setMode(t.dataset.mode as 'login' | 'register')));
+  tabs.forEach((t) => t.addEventListener('click', () => setAuthTab(t.dataset.tab as 'login' | 'register')));
 
   root.querySelectorAll<HTMLElement>('.demo-chip').forEach((chip) => {
     chip.addEventListener('click', () => {
-      setMode('login');
+      setAuthTab('login');
       (form.elements.namedItem('uin') as HTMLInputElement).value = chip.dataset.uin ?? '';
       (form.elements.namedItem('password') as HTMLInputElement).value = chip.dataset.pw ?? '';
       submit.focus();

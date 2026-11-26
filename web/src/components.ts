@@ -10,10 +10,8 @@ const VIS_LABEL: Record<string, string> = {
 /** 首页头条卡片：大图 + 摘要。 */
 export function featuredHTML(p: PostView): string {
   const cover = p.cover || p.images[0] || '';
-  return `<article class="feature card" data-post="${p.id}">
-    <a class="feature-cover" href="#/post/${p.id}">
-      ${cover ? `<img src="${esc(cover)}" alt="${esc(p.title)}" loading="lazy">` : `<div class="cover-fallback"></div>`}
-    </a>
+  return `<article class="feature card${cover ? '' : ' no-cover'}" data-post="${p.id}">
+    ${cover ? `<a class="feature-cover" href="#/post/${p.id}"><img src="${esc(cover)}" alt="${esc(p.title)}" loading="lazy"></a>` : ''}
     <div class="feature-body">
       <div class="post-kicker">
         ${p.pinned ? `<span class="pill pill-pin">${icon('pin', 11)}置顶</span>` : ''}
