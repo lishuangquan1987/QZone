@@ -51,9 +51,32 @@ export async function renderEditor(root: HTMLElement, ctx: ViewCtx): Promise<voi
   teardown?.();
   const ac = new AbortController();
   let offTheme: (() => void) | null = null;
+  // 离开页面后计时器可能还会跑一次，届时 DOM 已被替换，
+  // 所有回调都要先看 disposed，避免读到 null。
+  let disposed = false;
+  let saveTimer = 0;
+  let renderTimer = 0;
+  let outlineTimer = 0;
+  let published = false;
   teardown = () => {
+    disposed = true;
+    window.clearTimeout(saveTimer);
+    window.clearTimeout(renderTimer);
+    window.clearTimeout(outlineTimer);
+    // 防抖还没触发就离开时补存一次，避免刚写的内容丢掉；
+    // 已经发布成功的不用存，否则会留下一条幽灵草稿。
+    if (!published) {
+      try {
+        if (saveState.classList.contains('dirty') && content.value.trim()) {
+          localStorage.setItem(draftKey, JSON.stringify(collect()));
+        }
+      } catch {
+        /* 存储配额或隐私模式下忽略 */
+      }
+    }
     ac.abort();
     offTheme?.();
+    document.body.classList.remove('writer-mode');
   };
 
   let cover = existing?.cover ?? '';
@@ -309,10 +332,10 @@ export async function renderEditor(root: HTMLElement, ctx: ViewCtx): Promise<voi
 
   /* ---------- 预览与统计 ---------- */
 
-  let renderTimer = 0;
   function paintPreview(now = false) {
     window.clearTimeout(renderTimer);
     const run = () => {
+      if (disposed) return;
       const src = content.value;
       preview.innerHTML = src.trim() ? renderMarkdown(src) : '<p class="muted">预览会显示在这里</p>';
       const blocks = preview.querySelectorAll('h1,h2,h3,h4,p,li,pre,blockquote,table').length;
@@ -339,10 +362,10 @@ export async function renderEditor(root: HTMLElement, ctx: ViewCtx): Promise<voi
     cursorEl.textContent = `第 ${line} 行 · 第 ${col} 列`;
   }
 
-  let outlineTimer = 0;
   function paintOutline() {
     window.clearTimeout(outlineTimer);
     outlineTimer = window.setTimeout(() => {
+      if (disposed) return;
       const heads = collectHeadings(content.value);
       if (!heads.length) {
         outlineList.innerHTML = '<p class="muted">标题会出现在这里</p>';
@@ -408,19 +431,19 @@ export async function renderEditor(root: HTMLElement, ctx: ViewCtx): Promise<voi
   const collect = (): Draft => ({
     title: title.value,
     content: content.value,
-    category: q<HTMLInputElement>('#category').value,
-    visibility: q<HTMLSelectElement>('#visibility').value,
-    pinned: q<HTMLInputElement>('#pinned').checked,
+    category: q<HTMLInputElement>('#category')?.value ?? '随笔',
+    visibility: q<HTMLSelectElement>('#visibility')?.value ?? 'public',
+    pinned: q<HTMLInputElement>('#pinned')?.checked ?? false,
     cover,
     savedAt: Date.now(),
   });
 
-  let saveTimer = 0;
   const queueSave = () => {
     window.clearTimeout(saveTimer);
     saveState.textContent = '未保存';
     saveState.classList.add('dirty');
     saveTimer = window.setTimeout(() => {
+      if (disposed || published) return;
       localStorage.setItem(draftKey, JSON.stringify(collect()));
       const t = new Date();
       saveState.textContent = `已存草稿 ${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
@@ -853,6 +876,8 @@ export async function renderEditor(root: HTMLElement, ctx: ViewCtx): Promise<voi
     btn.textContent = '保存中…';
     try {
       const saved = editId ? await api.updatePost(editId, payload) : await api.createPost(payload);
+      published = true;
+      window.clearTimeout(saveTimer);
       localStorage.removeItem(draftKey);
       toast(editId ? '已保存' : '已发布', 'ok');
       location.hash = `#/post/${saved.id}`;
