@@ -10,6 +10,9 @@ const IMAGE_LIMIT_MB = 30;
 
 type Mode = 'edit' | 'split' | 'preview';
 
+/** 上一次挂载的编辑器残留的全局监听器，重新挂载时统一释放。 */
+let teardown: (() => void) | null = null;
+
 const LS_MODE = 'qz.editor.mode';
 const LS_SPLIT = 'qz.editor.split';
 
@@ -43,6 +46,10 @@ export async function renderEditor(root: HTMLElement, ctx: ViewCtx): Promise<voi
       return;
     }
   }
+
+  teardown?.();
+  const ac = new AbortController();
+  teardown = () => ac.abort();
 
   let cover = existing?.cover ?? '';
   let images = existing?.images ?? [];
@@ -290,7 +297,7 @@ export async function renderEditor(root: HTMLElement, ctx: ViewCtx): Promise<voi
     btnFull.innerHTML = on ? icon('compress', 15) : icon('expand', 15);
     btnFull.classList.toggle('on', on);
     btnFull.title = on ? '退出全屏' : '全屏写作';
-  });
+  }, { signal: ac.signal });
 
   /* ---------- 预览与统计 ---------- */
 
@@ -426,7 +433,7 @@ export async function renderEditor(root: HTMLElement, ctx: ViewCtx): Promise<voi
       q<HTMLSelectElement>('#visibility').value = draft.visibility || 'public';
       q<HTMLInputElement>('#pinned').checked = !!draft.pinned;
       cover = draft.cover || cover;
-      if (cover) q('#cover-slot').innerHTML = `<img src="${esc(cover)}" alt="">`;
+      if (cover) setCoverPreview(cover);
       draftBar.hidden = true;
       refresh();
       paintPreview(true);
@@ -772,6 +779,13 @@ export async function renderEditor(root: HTMLElement, ctx: ViewCtx): Promise<voi
 
   const coverSlot = q<HTMLElement>('#cover-slot');
   const coverInput = q<HTMLInputElement>('#cover-input');
+
+  // 只换图，不重建 slot —— 里面还有 file input，重建会让第二次上传失效
+  const setCoverPreview = (url: string) => {
+    coverSlot.querySelector('img')?.remove();
+    coverSlot.querySelector('span')?.remove();
+    coverSlot.insertAdjacentHTML('afterbegin', url ? `<img src="${esc(url)}" alt="">` : '<span>点击上传封面</span>');
+  };
   coverSlot.addEventListener('click', () => coverInput.click());
   coverInput.addEventListener('change', async () => {
     const f = coverInput.files?.[0];
@@ -780,7 +794,7 @@ export async function renderEditor(root: HTMLElement, ctx: ViewCtx): Promise<voi
       const prepared = await prepareImage(f);
       const { url } = await api.upload(prepared.file);
       cover = url;
-      coverSlot.innerHTML = `<img src="${esc(url)}" alt="">`;
+      setCoverPreview(url);
       queueSave();
       toast('封面已更新', 'ok');
     } catch (err) {
@@ -805,7 +819,7 @@ export async function renderEditor(root: HTMLElement, ctx: ViewCtx): Promise<voi
       else if (outline.dataset.open === 'true') setDrawer(outline, false);
       else if (side.dataset.open === 'true') setDrawer(side, false);
     }
-  });
+  }, { signal: ac.signal });
 
   /* ---------- 保存 ---------- */
 
@@ -847,7 +861,7 @@ export async function renderEditor(root: HTMLElement, ctx: ViewCtx): Promise<voi
       e.preventDefault();
       e.returnValue = '';
     }
-  });
+  }, { signal: ac.signal });
 
   /* ---------- 初始化 ---------- */
 
