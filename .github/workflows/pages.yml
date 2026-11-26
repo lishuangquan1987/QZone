@@ -49,9 +49,8 @@ jobs:
           touch dist/.nojekyll
 
       - uses: actions/configure-pages@v5
-        with:
-          # 首次运行自动把 Pages 的 Source 切到 GitHub Actions，省去手动设置
-          enablement: true
+        # 站点需先在 Settings → Pages → Source 选 GitHub Actions 建好；
+        # 不在这里用 enablement 自动创建，GITHUB_TOKEN 无仓库管理权限时会直接失败。
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web/dist
