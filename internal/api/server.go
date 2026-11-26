@@ -198,35 +198,35 @@ type brief struct {
 }
 
 type userView struct {
-	ID          int      `json:"id"`
-	UIN         string   `json:"uin"`
-	Nickname    string   `json:"nickname"`
-	Avatar      string   `json:"avatar"`
-	Cover       string   `json:"cover"`
-	Signature   string   `json:"signature"`
-	Bio         string   `json:"bio"`
-	City        string   `json:"city"`
-	Constel     string   `json:"constellation"`
-	Gender      int      `json:"gender"`
-	Age         int      `json:"age"`
-	Level       int      `json:"level"`
-	Vip         int      `json:"vip"`
-	Theme       string   `json:"theme"`
-	Mood        string   `json:"mood"`
-	BgmTitle    string   `json:"bgmTitle"`
-	BgmURL      string   `json:"bgmUrl"`
-	Tags        []string `json:"tags"`
-	VisitCount  int      `json:"visitCount"`
-	SignStreak  int      `json:"signStreak"`
-	SunValue    int      `json:"sunValue"`
-	LastSignIn  string   `json:"lastSignIn"`
-	IsSelf      bool     `json:"isSelf"`
-	Posts       int      `json:"posts"`
-	Journals    int      `json:"journals"`
-	Photos      int      `json:"photos"`
-	Messages    int      `json:"messages"`
-	TodayVisit  int      `json:"todayVisit"`
-	CreatedAt   string   `json:"createdAt"`
+	ID         int      `json:"id"`
+	UIN        string   `json:"uin"`
+	Nickname   string   `json:"nickname"`
+	Avatar     string   `json:"avatar"`
+	Cover      string   `json:"cover"`
+	Signature  string   `json:"signature"`
+	Bio        string   `json:"bio"`
+	City       string   `json:"city"`
+	Constel    string   `json:"constellation"`
+	Gender     int      `json:"gender"`
+	Age        int      `json:"age"`
+	Level      int      `json:"level"`
+	Vip        int      `json:"vip"`
+	Theme      string   `json:"theme"`
+	Mood       string   `json:"mood"`
+	BgmTitle   string   `json:"bgmTitle"`
+	BgmURL     string   `json:"bgmUrl"`
+	Tags       []string `json:"tags"`
+	VisitCount int      `json:"visitCount"`
+	SignStreak int      `json:"signStreak"`
+	SunValue   int      `json:"sunValue"`
+	LastSignIn string   `json:"lastSignIn"`
+	IsSelf     bool     `json:"isSelf"`
+	Posts      int      `json:"posts"`
+	Journals   int      `json:"journals"`
+	Photos     int      `json:"photos"`
+	Messages   int      `json:"messages"`
+	TodayVisit int      `json:"todayVisit"`
+	CreatedAt  string   `json:"createdAt"`
 }
 
 type commentView struct {
@@ -378,5 +378,3 @@ func containsName(ss []string, v string) bool {
 	}
 	return false
 }
-
-

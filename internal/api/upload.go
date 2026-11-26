@@ -16,8 +16,6 @@ import (
 	"qzone/internal/media"
 )
 
-
-
 // saveUpload 把上传文件落到 uploads/<uin>/<yyyymm>/<random><ext>，返回可访问 URL。
 func (s *Server) saveUpload(r *http.Request, me *ent.User, field string, limit int64, audio bool) (string, error) {
 	if err := r.ParseMultipartForm(limit + (4 << 20)); err != nil {

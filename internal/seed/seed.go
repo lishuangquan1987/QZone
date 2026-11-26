@@ -247,8 +247,8 @@ def normalize(ts, tz="Asia/Shanghai"):
 		{
 			author: friend, title: "窗台上的第三盆薄荷", category: "生活",
 			summary: "前两盆死因不明，这一盆的死因很明确：被猫啃的。",
-			views:    412,
-			ago:      28 * time.Hour,
+			views:   412,
+			ago:     28 * time.Hour,
 			content: `薄荷是第三盆了。前两盆死因不明，这一盆的死因很明确：被猫啃的。
 
 它每天六点准时踩我的脸，理由是碗空了。我一度想把它送走，直到某个加班到凌晨的晚上，推门看见它蹲在门口，尾巴一圈一圈地扫着地板。
@@ -264,8 +264,8 @@ def normalize(ts, tz="Asia/Shanghai"):
 		{
 			author: friend, title: "读《额尔古纳河右岸》", category: "阅读",
 			summary: "一个民族的百年，被讲成了一个老人的一夜。",
-			views:    188,
-			ago:      5 * 24 * time.Hour,
+			views:   188,
+			ago:     5 * 24 * time.Hour,
 			content: `这本书我读了很久，不是因为难读，是因为舍不得读完。
 
 一个民族的百年，被讲成了一个老人的一夜。她坐在火堆边，把亲人一个一个地送走，语气平静得像在说别人的事。

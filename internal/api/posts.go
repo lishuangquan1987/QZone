@@ -472,9 +472,9 @@ func (s *Server) postViews(ctx context.Context, rows []*ent.Post, viewerID int, 
 			Pinned: p.Pinned, Views: p.Views, At: timeStr(p.CreatedAt),
 			UpdatedAt: timeStr(p.UpdatedAt), Author: toBrief(author),
 			Likes: likeMap[p.ID], Liked: likedSet[p.ID],
-			LikeCount: len(likeMap[p.ID]),
-			CommentNum: len(comments),
-			CanEdit:    author != nil && author.ID == viewerID,
+			LikeCount:   len(likeMap[p.ID]),
+			CommentNum:  len(comments),
+			CanEdit:     author != nil && author.ID == viewerID,
 			ReadingTime: readingTime(p.Content),
 		}
 		if pv.Images == nil {

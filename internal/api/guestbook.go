@@ -44,8 +44,8 @@ func (s *Server) listGuestbook(w http.ResponseWriter, r *http.Request, me *ent.U
 	for _, g := range rows {
 		out = append(out, guestbookView{
 			ID: g.ID, Content: g.Content, Reply: g.Reply, At: timeStr(g.CreatedAt),
-			Author: toBrief(g.Edges.Author),
-			CanDel: g.AuthorID == me.ID || g.OwnerID == me.ID,
+			Author:  toBrief(g.Edges.Author),
+			CanDel:  g.AuthorID == me.ID || g.OwnerID == me.ID,
 			CanEdit: g.OwnerID == me.ID,
 		})
 	}

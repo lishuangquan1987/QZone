@@ -240,11 +240,11 @@ func (s *Server) addPhotos(w http.ResponseWriter, r *http.Request, me *ent.User)
 		return
 	}
 	var req struct {
-		URLs     []string `json:"urls"`
-		Caption  string   `json:"caption"`
-		Widths   []int    `json:"widths"`
-		Heights  []int    `json:"heights"`
-		Sizes    []int64  `json:"sizes"`
+		URLs    []string `json:"urls"`
+		Caption string   `json:"caption"`
+		Widths  []int    `json:"widths"`
+		Heights []int    `json:"heights"`
+		Sizes   []int64  `json:"sizes"`
 	}
 	if err := decode(r, &req); err != nil {
 		fail(w, http.StatusBadRequest, "请求格式有误")
