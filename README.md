@@ -60,8 +60,8 @@ cd web && npm run dev        # 终端 B → http://localhost:5173
 
 | 工作流 | 触发 | 产出 |
 | --- | --- | --- |
-| `ci.yml` | push / PR | 前端构建 + `go vet` + `go test` + 静态编译 + 启动冒烟测试 + 镜像可构建性 |
-| `pages.yml` | push 到 `main`（`web/**` 变更）/ 手动 | **GitHub Pages 静态演示站** |
+| `ci.yml` | push 到 `main` / `master`、PR、手动 | 前端构建 + `go vet` + `go test` + 静态编译 + 启动冒烟测试 + 镜像可构建性 |
+| `pages.yml` | push 到 `main` / `master`（`web/**` 变更）/ 手动 | **GitHub Pages 静态演示站** |
 | `release.yml` | 推 `v*` tag | 5 个平台的单文件二进制（zip）+ `ghcr.io` 多架构镜像 |
 
 ### 方式一：Docker（推荐自建）

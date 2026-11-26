@@ -8,7 +8,7 @@ name: Deploy demo to Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
     paths:
       - 'web/**'
       - '.github/workflows/pages.yml'
