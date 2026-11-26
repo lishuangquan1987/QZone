@@ -18,8 +18,8 @@
 
 | # | 问题 | 位置 | 现状证据 | 建议 |
 | --- | --- | --- | --- | --- |
-| 1 | **媒体目录绕过权限** | `internal/api/server.go` `mediaHandler()` | 私有相册《存档：毕业那年》的照片 `/media/seed/a-campus.svg`，**未登录 curl 直接 200** | 媒体流走鉴权（按 `uploads/<uin>/` 前缀判定归属），或签发短时有效的 HMAC 签名 URL；对象存储同理 |
-| 2 | **SVG 上传 = 存储型 XSS** | `internal/media/media.go` `SafeExt()` + `mediaHandler()` | 允许 `image/svg+xml`，并按扩展名原样输出，同源打开即执行脚本 | 禁用 SVG；或强制 `Content-Disposition: attachment` + `Content-Security-Policy: sandbox` + `X-Content-Type-Options: nosniff` |
+| 1 | ~~媒体目录绕过权限~~ **已修** | `internal/api/server.go` `mediaHandler()` | 私有相册照片 `/media/seed/a-campus.svg` 未登录可直接 200、换账号也能拿 | 先验会话，再按所在相册的 `visible()` 判断；实测未登录 401、他人 403、主人 200，缓存改为 `private` |
+| 2 | ~~SVG 上传 = 存储型 XSS~~ **已缓解** | `mediaHandler()` | 允许 `image/svg+xml`，同源直接打开会执行脚本 | 对 `.svg` 响应加 `Content-Security-Policy: default-src 'none'; sandbox` + `nosniff`，直接打开也跑不了脚本 |
 | 3 | **`unlisted` 语义失效** | `posts.go` `VisibilityNEQ("private")`、`albums.go:122`、`users.go` 统计 | 「仅链接可见」的文章 / 相册会出现在别人的列表里（已实测复现） | **已修**：列表与统计统一改为 `= public`，详情页仍按「非 private 即可见」放行 |
 | 4 | **默认背景音乐 404** | `internal/seed/seed.go` `SetBgmURL("/media/seed/ambient.wav")` | 实际文件叫 `music-night.wav`，登录即弹「背景音乐播放失败，可能是格式不支持」 | **已修**：指向 `media.TrackFile("night")` |
 
@@ -28,8 +28,8 @@
 | # | 问题 | 位置 | 建议 |
 | --- | --- | --- | --- |
 | 5 | Cookie 没有 `Secure`，全站无安全响应头 | `issueSession()` | HTTPS 下加 `Secure`；补 `CSP` / `X-Frame-Options` / `Referrer-Policy` / `nosniff` |
-| 6 | 登录、注册无速率限制 | `auth.go` `login()` | 按 IP + 空间号做滑动窗口（内存 map 足够）；失败次数过多延迟响应 |
-| 7 | 会话过期不清理 | `ent/schema/session.go` | 启动时 + 定时 `DELETE FROM sessions WHERE expires_at < now()` |
+| 6 | ~~登录无速率限制~~ **已修** | `auth.go` `login()` | 按「IP + 空间号」5 分钟 8 次滑动窗口，第 9 次返回 429；登录成功即清零（注册仍未限速） |
+| 7 | ~~会话过期不清理~~ **已修** | `main.go` | 启动时 `DELETE FROM sessions WHERE expires_at < now()`，并打印清理条数 |
 | 8 | 浏览量可刷 | `getPost()` 每次 GET `AddViews(1)` | 同 IP + 文章 30 分钟内去重，或改用 `post_views` 明细表 |
 | 9 | 上传只信任 `Content-Type` | `upload.go` `saveUpload()` | 读前 512 字节做魔数校验（`http.DetectContentType`）；图片重编码以剥离 EXIF；生成缩略图 |
 | 10 | 无压缩、无长缓存 | `spaHandler()`、`mediaHandler()` | 静态资源加 `Cache-Control: public,max-age=31536000,immutable`（Vite 带 hash）；文本走 gzip/br；`spaHandler` 不必把整文件读进内存再写回 |
@@ -47,9 +47,23 @@
 | 17 | 一键导出 | SQLite 文件好备份，但缺「文章 Markdown + 媒体 zip」的导出 |
 | 18 | 可访问性 | 视图切换按钮缺 `aria-pressed`，Toast 缺 `role="status"`，`modal` 无焦点陷阱 |
 | 19 | 草稿箱 | 草稿只在 localStorage，换设备就没了 |
-| 20 | `gofmt -l` 目前会列出 6 个文件（`internal/api/*.go` 的结构体字段对齐） | 一次性 `gofmt -w` 清理，然后在 CI 加 `gofmt -l` 校验，避免后续 diff 里混入空白噪音 |
+| 20 | ~~`gofmt -l` 列出 6 个文件~~ **已修** | 已 `gofmt -w`；建议再在 CI 加一条 `gofmt -l` 校验 |
+| 21 | 上传只校验扩展名 / 声明类型，未读魔数 | `upload.go` | 伪造 `Content-Type: image/png` 的文件会原样落盘；`nosniff` 挡住了执行，但仍建议按 `http.DetectContentType` 校验 |
+| 22 | 删除文章 / 相册不清理磁盘文件 | `posts.go`、`albums.go` | 数据库记录删了，`uploads/` 里的原图还在，长期会涨；可在删除时顺带 `os.Remove` |
 
 ---
+
+### 本轮修掉的其它问题
+
+| 问题 | 说明 |
+| --- | --- |
+| 灯箱要连点几次才关掉 | `bindLightbox()` 在相册每次重绘（点赞、删除、上传）时重复绑定，一次点击叠出多层遮罩；改为每个容器只绑一次，并在打开前清掉残留层 |
+| 相册无法修改可见范围 | 新增 `PATCH /api/albums/{id}`（仅主人），详情页「设置」可选公开 / 隐藏 / 仅自己；演示模式同步实现 |
+| 删掉封面照片后列表破图 | `deletePhoto()` 原本只在 `cover == ""` 时补封面；改成删除后重算：有照片取最早一张，空了就清空 |
+| 离开写作页报 `Cannot read properties of null` | 草稿防抖计时器在 DOM 已被替换后触发；增加 `disposed` 标志、清理所有计时器，并在离开时补存草稿 |
+| 发布后残留「未发布草稿」 | 保存成功后清掉防抖计时器，避免它在 `localStorage.remove` 之后又写回 |
+| Markdown 链接可执行 `javascript:` | `renderMarkdown()` 加了基于 `<template>` 的协议过滤，只保留 http(s)/mailto/站内路径 |
+| 启动日志地址拼接错误 | `http://localhost%s` 与 `127.0.0.1:8123` 拼成 `localhost127.0.0.1`，按 `:port` / `0.0.0.0:port` 归一化 |
 
 ## 二、这次改了什么
 

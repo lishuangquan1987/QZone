@@ -9,8 +9,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
+	"qzone/ent/session"
 	"qzone/internal/api"
 	"qzone/internal/db"
 	"qzone/internal/seed"
@@ -43,6 +45,10 @@ func main() {
 	defer client.Close()
 
 	ctx := context.Background()
+	// 过期会话不会自己消失，启动时顺手清掉
+	if n, err := client.Session.Delete().Where(session.ExpiresAtLT(time.Now())).Exec(ctx); err == nil && n > 0 {
+		log.Printf("清理过期会话 %d 条", n)
+	}
 	empty, err := db.Empty(ctx, client)
 	if err != nil {
 		log.Fatalf("检查数据库失败: %v", err)
@@ -69,7 +75,14 @@ func main() {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
-	log.Printf("个人空间 %s 已启动: http://localhost%s", version, *addr)
+	display := *addr
+	if strings.HasPrefix(display, ":") {
+		display = "localhost" + display
+	}
+	if strings.HasPrefix(display, "0.0.0.0:") {
+		display = "localhost:" + strings.TrimPrefix(display, "0.0.0.0:")
+	}
+	log.Printf("个人空间 %s 已启动: http://%s", version, display)
 	log.Printf("演示账号: 294388344 / qzone123 · linwan / qzone123")
 	if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("服务退出: %v", err)
