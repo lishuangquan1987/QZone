@@ -37,6 +37,9 @@ const ICONS: Record<string, string> = {
     '<path d="M12 20s-7.5-4.6-7.5-9.4A4.1 4.1 0 0 1 12 7.8a4.1 4.1 0 0 1 7.5 2.8C19.5 15.4 12 20 12 20z"/>',
   message: '<path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.4 9 9 0 0 1-3.8-.8L3 21l1.9-5.3A8.3 8.3 0 0 1 4 11.5 8.4 8.4 0 0 1 12.5 3 8.4 8.4 0 0 1 21 11.5z"/>',
   eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>',
+  eyeoff:
+    '<path d="M4 4l16 16"/><path d="M9.6 5.9A9.6 9.6 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a17 17 0 0 1-3.3 3.9"/><path d="M6.7 7.6A17 17 0 0 0 2.5 12S6 18.5 12 18.5a9.8 9.8 0 0 0 3.7-.7"/><path d="M9.9 10a3 3 0 0 0 4.2 4.2"/>',
+  globe: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.2 2.3 3.4 5.3 3.4 8.5S14.2 18.2 12 20.5c-2.2-2.3-3.4-5.3-3.4-8.5S9.8 5.8 12 3.5z"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3.2 2"/>',
   image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="M4 17l4.5-4.5L13 17l3-3 4 4"/>',
   music: '<circle cx="7" cy="17" r="2.6"/><circle cx="18" cy="15" r="2.6"/><path d="M9.6 17V7l8.4-2v10"/>',
@@ -174,69 +177,185 @@ export async function confirmDialog(title: string, message: string, confirmText 
   return modal({ title, body: `<p class="confirm-text">${esc(message)}</p>`, confirmText });
 }
 
+/** 已经绑定过灯箱的容器；相册详情每次重绘都会重新调用 bindLightbox，
+ *  重复绑定会让一次点击弹出多层灯箱——关掉一层还有下一层，看起来像「关不掉」。 */
+const LIGHTBOX_BOUND = new WeakSet<HTMLElement>();
+
 export function bindLightbox(root: HTMLElement): void {
+  if (LIGHTBOX_BOUND.has(root)) return;
+  LIGHTBOX_BOUND.add(root);
   root.addEventListener('click', (e) => {
-    const target = (e.target as HTMLElement).closest<HTMLElement>('[data-zoom]');
+    const el = e.target as HTMLElement;
+    if (el.closest('button, a.album-card, .photo-tools')) return;
+    const target = el.closest<HTMLElement>('[data-zoom]');
     if (!target) return;
-    if ((e.target as HTMLElement).closest('button')) return;
-    const src = target.dataset.zoom || (target as HTMLImageElement).src;
-    const group = Array.from(root.querySelectorAll<HTMLElement>('[data-zoom]')).map(
-      (n) => n.dataset.zoom || (n as HTMLImageElement).src,
-    );
-    let idx = Math.max(0, group.indexOf(src));
-    const box = document.createElement('div');
-    box.className = 'lightbox';
-    box.innerHTML = `
-      <button class="lb-close">${icon('close', 24)}</button>
-      <button class="lb-prev">${icon('back', 24)}</button>
-      <img alt="">
-      <button class="lb-next">${icon('chevron', 24)}</button>
-      <div class="lb-count"></div>`;
-    document.body.appendChild(box);
-    document.body.classList.add('no-scroll');
-    const img = box.querySelector('img')!;
-    const counter = box.querySelector('.lb-count')!;
-    const paint = () => {
-      img.src = group[idx];
-      counter.textContent = `${idx + 1} / ${group.length}`;
-    };
-    paint();
-    const onKey = (ev: KeyboardEvent) => {
-      if (ev.key === 'Escape') close();
-      if (ev.key === 'ArrowLeft' && group.length > 1) {
-        idx = (idx - 1 + group.length) % group.length;
-        paint();
-      }
-      if (ev.key === 'ArrowRight' && group.length > 1) {
-        idx = (idx + 1) % group.length;
-        paint();
-      }
-    };
-    const close = () => {
-      box.remove();
-      document.body.classList.remove('no-scroll');
-      window.removeEventListener('keydown', onKey);
-    };
-    box.querySelector('.lb-close')!.addEventListener('click', close);
-    box.addEventListener('click', (ev) => {
-      if (ev.target === box) close();
-    });
-    box.querySelector('.lb-prev')!.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      if (group.length > 1) {
-        idx = (idx - 1 + group.length) % group.length;
-        paint();
-      }
-    });
-    box.querySelector('.lb-next')!.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      if (group.length > 1) {
-        idx = (idx + 1) % group.length;
-        paint();
-      }
-    });
-    window.addEventListener('keydown', onKey);
+    const nodes = Array.from(root.querySelectorAll<HTMLElement>('[data-zoom]'));
+    const items = nodes.map((n) => ({
+      src: n.dataset.zoom || (n as HTMLImageElement).src,
+      caption: n.getAttribute('alt') || n.closest('figure')?.querySelector('figcaption')?.textContent?.trim() || '',
+    }));
+    const i = Math.max(0, nodes.indexOf(target));
+    openLightbox(items, i, target);
   });
+}
+
+export interface LightboxItem {
+  src: string;
+  caption?: string;
+}
+
+/** 图片查看器：支持键盘、触摸滑动、缩略图跳转，任意方式关闭都只关一层。 */
+export function openLightbox(items: LightboxItem[], start = 0, trigger?: HTMLElement): void {
+  if (!items.length) return;
+  // 已有灯箱就不叠加，避免多层遮罩导致「点好几次才关掉」
+  document.querySelector('.lx')?.remove();
+
+  let idx = Math.min(Math.max(start, 0), items.length - 1);
+  const box = document.createElement('div');
+  box.className = 'lx';
+  box.innerHTML = `
+    <div class="lx-top">
+      <span class="lx-count"></span>
+      <button class="lx-btn lx-close" aria-label="关闭">${icon('close', 22)}</button>
+    </div>
+    <button class="lx-nav lx-prev" aria-label="上一张">${icon('chevron', 26)}</button>
+    <figure class="lx-stage">
+      <img class="lx-img" alt="">
+      <span class="lx-spin" aria-hidden="true"></span>
+      <figcaption class="lx-cap"></figcaption>
+    </figure>
+    <button class="lx-nav lx-next" aria-label="下一张">${icon('chevron', 26)}</button>
+    <div class="lx-strip"></div>`;
+
+  const img = box.querySelector<HTMLImageElement>('.lx-img')!;
+  const stage = box.querySelector<HTMLElement>('.lx-stage')!;
+  const cap = box.querySelector<HTMLElement>('.lx-cap')!;
+  const count = box.querySelector<HTMLElement>('.lx-count')!;
+  const strip = box.querySelector<HTMLElement>('.lx-strip')!;
+  const prev = box.querySelector<HTMLElement>('.lx-prev')!;
+  const next = box.querySelector<HTMLElement>('.lx-next')!;
+
+  if (items.length > 1) {
+    strip.innerHTML = items
+      .map(
+        (it, i) =>
+          `<button class="lx-thumb" data-i="${i}" aria-label="第 ${i + 1} 张"><img src="${esc(it.src)}" alt="" loading="lazy"></button>`,
+      )
+      .join('');
+  } else {
+    strip.remove();
+    prev.remove();
+    next.remove();
+  }
+
+  const paint = () => {
+    const it = items[idx];
+    img.classList.remove('ready');
+    img.alt = it.caption || `图片 ${idx + 1}`;
+    img.src = it.src;
+    count.textContent = `${idx + 1} / ${items.length}`;
+    cap.textContent = it.caption || '';
+    cap.hidden = !it.caption;
+    strip.querySelectorAll<HTMLElement>('.lx-thumb').forEach((n, i) => {
+      n.classList.toggle('on', i === idx);
+      if (i === idx) n.scrollIntoView({ block: 'nearest', inline: 'center' });
+    });
+    // 预载左右各一张，切换时不闪白
+    [idx - 1, idx + 1].forEach((n) => {
+      const j = (n + items.length) % items.length;
+      if (j !== idx) new Image().src = items[j].src;
+    });
+  };
+
+  const go = (delta: number) => {
+    if (items.length < 2) return;
+    idx = (idx + delta + items.length) % items.length;
+    paint();
+  };
+
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    box.classList.add('out');
+    window.removeEventListener('keydown', onKey);
+    window.setTimeout(() => {
+      box.remove();
+      if (!document.querySelector('.lx')) document.body.classList.remove('no-scroll');
+    }, 160);
+    if (trigger && document.contains(trigger)) trigger.focus({ preventScroll: true });
+  };
+
+  const onKey = (ev: KeyboardEvent) => {
+    if (ev.key === 'Escape') {
+      ev.preventDefault();
+      close();
+    } else if (ev.key === 'ArrowLeft') {
+      ev.preventDefault();
+      go(-1);
+    } else if (ev.key === 'ArrowRight') {
+      ev.preventDefault();
+      go(1);
+    } else if (ev.key === 'Home') {
+      idx = 0;
+      paint();
+    } else if (ev.key === 'End') {
+      idx = items.length - 1;
+      paint();
+    }
+  };
+
+  img.addEventListener('load', () => img.classList.add('ready'));
+  img.addEventListener('error', () => img.classList.add('ready'));
+  box.querySelector('.lx-close')!.addEventListener('click', close);
+  prev.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    go(-1);
+  });
+  next.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    go(1);
+  });
+  // 点空白处关闭：只有点到遮罩或图片容器本身才算
+  box.addEventListener('click', (ev) => {
+    const t = ev.target as HTMLElement;
+    if (t === box || t === stage) close();
+  });
+  strip.addEventListener('click', (ev) => {
+    const b = (ev.target as HTMLElement).closest<HTMLElement>('.lx-thumb');
+    if (!b) return;
+    ev.stopPropagation();
+    idx = Number(b.dataset.i);
+    paint();
+  });
+
+  // 触摸：左右滑切换，下滑关闭
+  let sx = 0;
+  let sy = 0;
+  box.addEventListener(
+    'touchstart',
+    (ev) => {
+      sx = ev.touches[0].clientX;
+      sy = ev.touches[0].clientY;
+    },
+    { passive: true },
+  );
+  box.addEventListener(
+    'touchend',
+    (ev) => {
+      const dx = ev.changedTouches[0].clientX - sx;
+      const dy = ev.changedTouches[0].clientY - sy;
+      if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy)) go(dx < 0 ? 1 : -1);
+      else if (dy > 90 && Math.abs(dy) > Math.abs(dx) * 1.4) close();
+    },
+    { passive: true },
+  );
+
+  document.body.appendChild(box);
+  document.body.classList.add('no-scroll');
+  paint();
+  window.addEventListener('keydown', onKey);
+  box.querySelector<HTMLElement>('.lx-close')!.focus({ preventScroll: true });
 }
 
 export function emptyState(title: string, desc = '', actionHTML = ''): string {

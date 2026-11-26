@@ -237,6 +237,8 @@ export const api = {
   albums: (uin?: string) =>
     get<{ albums: AlbumView[] }>(`/api/albums${uin ? `?uin=${encodeURIComponent(uin)}` : ''}`),
   album: (id: number) => get<AlbumView>(`/api/albums/${id}`),
+  updateAlbum: (id: number, body: { name?: string; description?: string; privacy?: string }) =>
+    patch<AlbumView>(`/api/albums/${id}`, body),
   createAlbum: (body: { name: string; description: string; privacy: string }) =>
     post<AlbumView>('/api/albums', body),
   deleteAlbum: (id: number) => del<{ ok: boolean }>(`/api/albums/${id}`),

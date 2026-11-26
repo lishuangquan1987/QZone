@@ -1,6 +1,24 @@
 import type { AlbumView, CommentView, PostView } from './api';
 import { avatarHTML, esc, icon, timeAgo } from './ui';
 
+const CAT_HUE: Record<string, number> = {
+  城市: 30, 技术: 212, 旅行: 168, 随笔: 282, 生活: 8, 摄影: 196, 读书: 248, 音乐: 330,
+};
+
+/** 分类 → 色相（未收录的分类用名字哈希，保证同一分类颜色稳定）。 */
+export function catHue(cat: string): number {
+  if (!cat) return 40;
+  const hit = CAT_HUE[cat];
+  if (hit !== undefined) return hit;
+  let h = 0;
+  for (const ch of cat) h = (h * 31 + (ch.codePointAt(0) ?? 0)) % 360;
+  return h;
+}
+
+function categoryPill(cat: string): string {
+  return `<span class="pill cat" style="--cat:${catHue(cat)}">${esc(cat)}</span>`;
+}
+
 const VIS_LABEL: Record<string, string> = {
   private: '仅自己可见',
   unlisted: '不公开列出',
@@ -15,7 +33,7 @@ export function featuredHTML(p: PostView): string {
     <div class="feature-body">
       <div class="post-kicker">
         ${p.pinned ? `<span class="pill pill-pin">${icon('pin', 11)}置顶</span>` : ''}
-        <span class="pill">${esc(p.category)}</span>
+        ${categoryPill(p.category)}
         ${p.visibility !== 'public' ? `<span class="pill pill-lock">${icon('lock', 11)}${VIS_LABEL[p.visibility]}</span>` : ''}
       </div>
       <h2 class="feature-title"><a href="#/post/${p.id}">${esc(p.title || '无标题')}</a></h2>
@@ -40,7 +58,7 @@ export function postRowHTML(p: PostView): string {
     <div class="post-row-body">
       <div class="post-kicker">
         ${p.pinned ? `<span class="pill pill-pin">${icon('pin', 11)}置顶</span>` : ''}
-        <span class="pill">${esc(p.category)}</span>
+        ${categoryPill(p.category)}
         ${p.visibility !== 'public' ? `<span class="pill pill-lock">${icon('lock', 11)}${VIS_LABEL[p.visibility]}</span>` : ''}
       </div>
       <h3 class="post-row-title"><a href="#/post/${p.id}">${esc(p.title || '无标题')}</a></h3>
@@ -83,10 +101,16 @@ export function commentsHTML(list: CommentView[]): string {
 }
 
 export function albumCardHTML(a: AlbumView): string {
+  const vis =
+    a.privacy === 'public'
+      ? ''
+      : `<span class="album-vis">${icon(a.privacy === 'private' ? 'lock' : 'eyeoff', 12)}${a.privacy === 'private' ? '仅自己' : '隐藏'}</span>`;
   return `<a class="album-card card" href="#/album/${a.id}">
     <div class="album-cover">
       ${a.cover ? `<img src="${esc(a.cover)}" alt="${esc(a.name)}" loading="lazy">` : `<div class="cover-fallback"></div>`}
       <span class="album-count">${a.count} 张</span>
+      ${vis}
+      <span class="album-shade" aria-hidden="true"></span>
     </div>
     <div class="album-info">
       <h3>${esc(a.name)}</h3>

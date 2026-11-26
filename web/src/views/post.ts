@@ -1,5 +1,5 @@
 import { api, type PostView } from '../api';
-import { commentsHTML } from '../components';
+import { catHue, commentsHTML } from '../components';
 import { renderMarkdown } from '../md';
 import { avatarHTML, bindLightbox, confirmDialog, esc, fullTime, icon, toast } from '../ui';
 import type { ViewCtx } from '../types';
@@ -16,7 +16,7 @@ export async function renderPost(root: HTMLElement, ctx: ViewCtx): Promise<void>
       <header class="article-head">
         <div class="post-kicker">
           ${p.pinned ? `<span class="pill pill-pin">${icon('pin', 11)}置顶</span>` : ''}
-          <a class="pill" href="#/posts?category=${encodeURIComponent(p.category)}">${esc(p.category)}</a>
+          <a class="pill cat" style="--cat:${catHue(p.category)}" href="#/posts?category=${encodeURIComponent(p.category)}">${esc(p.category)}</a>
           ${
             p.visibility !== 'public'
               ? `<span class="pill pill-lock">${icon('lock', 11)}${p.visibility === 'private' ? '仅自己可见' : '不公开列出'}</span>`

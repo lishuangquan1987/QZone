@@ -952,6 +952,19 @@ export async function demoRequest(path: string, init: RequestInit = {}): Promise
 
     if (r.length === 2) {
       if (method === 'GET') return ok(albumView(album, me, true));
+      if (method === 'PATCH') {
+        if (album.ownerId !== me.id) return bad(403, '只能修改自己的相册');
+        const b = body();
+        if (typeof b.name === 'string') {
+          const name = b.name.trim();
+          if (!name) return bad(400, '相册名称不能为空');
+          album.name = name.slice(0, 24);
+        }
+        if (typeof b.description === 'string') album.description = b.description.trim().slice(0, 120);
+        if (b.privacy === 'public' || b.privacy === 'unlisted' || b.privacy === 'private') album.privacy = b.privacy;
+        persist();
+        return ok(albumView(album, me, false));
+      }
       if (method === 'DELETE') {
         if (album.ownerId !== me.id) return bad(403, '只能删除自己的相册');
         const ids = d.photos.filter((p) => p.albumId === album.id).map((p) => p.id);
@@ -989,7 +1002,11 @@ export async function demoRequest(path: string, init: RequestInit = {}): Promise
         if (album.ownerId !== me.id) return bad(403, '只能删除自己相册里的照片');
         d.photos = d.photos.filter((p) => !(p.id === pid && p.albumId === album.id));
         d.photoLikes = d.photoLikes.filter((l) => l.photoId !== pid);
-        if (album.cover && !d.photos.some((p) => p.albumId === album.id)) album.cover = '';
+        // 封面跟着照片走，避免留下指向已删照片的破图
+        const rest = d.photos
+          .filter((p) => p.albumId === album.id)
+          .sort((x, y) => x.at.localeCompare(y.at));
+        album.cover = rest[0]?.url ?? '';
         persist();
         return ok({ ok: true });
       }
