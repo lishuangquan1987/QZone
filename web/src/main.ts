@@ -1,7 +1,7 @@
 import './styles.css';
 import { DEMO } from './env';
 import { api, ApiError } from './api';
-import { state, setBoot, me, applyTheme, unread } from './state';
+import { state, setBoot, me, applyTheme, unread, resetViewAbort } from './state';
 import { bgm } from './music';
 import { bindThemeToggle, themeToggleHTML } from './theme';
 import { avatarHTML, esc, icon, toast } from './ui';
@@ -47,6 +47,34 @@ const ROUTES: RouteDef[] = [
 
 let shellMounted = false;
 let menuOpen = false;
+
+// 路由切换的顶部进度条：只有真的慢了才显示，避免一闪而过
+let barTimer = 0;
+function beginRoute(): HTMLElement {
+  let bar = document.getElementById('route-bar');
+  if (!bar) {
+    bar = document.createElement('i');
+    bar.id = 'route-bar';
+    document.body.appendChild(bar);
+  }
+  bar.className = '';
+  window.clearTimeout(barTimer);
+  barTimer = window.setTimeout(() => {
+    if (bar && bar.className === '') bar.className = 'on';
+  }, 150);
+  return bar;
+}
+function endRoute(bar: HTMLElement): void {
+  window.clearTimeout(barTimer);
+  if (bar.className !== 'on') {
+    bar.className = '';
+    return;
+  }
+  bar.className = 'done';
+  barTimer = window.setTimeout(() => {
+    if (bar.className === 'done') bar.className = '';
+  }, 320);
+}
 
 function parseHash(): { path: string; query: URLSearchParams } {
   const raw = location.hash.replace(/^#/, '') || '/home';
@@ -202,24 +230,26 @@ async function renderRoute(): Promise<void> {
     el.classList.toggle('active', el.dataset.nav === hit?.def.nav);
   });
 
-  if (!hit) {
-    view.innerHTML = `<div class="page narrow"><div class="card empty">
-      <h2 class="empty-title">页面不存在</h2>
-      <p class="empty-desc">这条链接可能已经失效。</p>
-      <a class="btn btn-primary" href="#/home">回到首页</a>
-    </div></div>`;
-    return;
-  }
-
-  const params: Record<string, string> = { ...Object.fromEntries(query) };
-  if (hit.id) {
-    params.id = hit.id;
-    if (hit.def.pattern.source.includes('[^/]')) params.uin = hit.id;
-  }
-
-  window.scrollTo({ top: 0 });
-  const ctx = { params, reload: renderRoute };
+  resetViewAbort();
+  const bar = beginRoute();
   try {
+    if (!hit) {
+      view.innerHTML = `<div class="page narrow"><div class="card empty">
+        <h2 class="empty-title">页面不存在</h2>
+        <p class="empty-desc">这条链接可能已经失效。</p>
+        <a class="btn btn-primary" href="#/home">回到首页</a>
+      </div></div>`;
+      return;
+    }
+
+    const params: Record<string, string> = { ...Object.fromEntries(query) };
+    if (hit.id) {
+      params.id = hit.id;
+      if (hit.def.pattern.source.includes('[^/]')) params.uin = hit.id;
+    }
+
+    window.scrollTo({ top: 0 });
+    const ctx = { params, reload: renderRoute };
     await hit.def.render(view, ctx);
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) return;
@@ -229,6 +259,8 @@ async function renderRoute(): Promise<void> {
       <button class="btn btn-primary" id="retry">重试</button>
     </div></div>`;
     view.querySelector('#retry')?.addEventListener('click', () => void renderRoute());
+  } finally {
+    endRoute(bar);
   }
 }
 

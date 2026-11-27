@@ -107,7 +107,7 @@ export async function renderAlbum(root: HTMLElement, ctx: ViewCtx): Promise<void
             ? album.photos
                 .map(
                   (p) => `<figure class="photo" data-pid="${p.id}">
-                    <img src="${esc(p.url)}" alt="${esc(p.caption)}" loading="lazy" data-zoom="${esc(p.url)}">
+                    <img src="${esc(p.url)}" alt="${esc(p.caption)}" loading="lazy" decoding="async" width="${p.width || 800}" height="${p.height || 600}" data-zoom="${esc(p.url)}">
                     <figcaption>
                       <span>${esc(p.caption || timeAgo(p.at))}</span>
                       <span class="photo-like">${icon('heart', 12)} ${p.likeCount}</span>

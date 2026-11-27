@@ -282,7 +282,7 @@ textarea.input { resize: vertical; line-height: 1.8; }
 .hero-stats span { display: inline-flex; align-items: baseline; gap: 5px; font-size: 12px; opacity: 0.85; }
 .hero-stats b { font-size: 19px; font-weight: 600; opacity: 1; }
 .hero-actions { display: flex; gap: 10px; padding-bottom: 4px; }
-.hero .btn-ghost { background: rgba(255, 255, 255, 0.16); border-color: rgba(255, 255, 255, 0.4); color: #fff; backdrop-filter: blur(6px); }
+.hero .btn-ghost { background: rgba(255, 255, 255, 0.16); border-color: rgba(255, 255, 255, 0.4); color: #fff; }
 .hero .btn-ghost:hover { background: rgba(255, 255, 255, 0.26); color: #fff; }
 
 /* ---------- 首页两栏 ---------- */
@@ -419,14 +419,14 @@ textarea.input { resize: vertical; line-height: 1.8; }
 .album-card:hover { transform: translateY(-3px); box-shadow: 0 4px 8px rgba(24, 22, 18, 0.04), 0 28px 50px -32px rgba(24, 22, 18, 0.3); }
 .album-cover { position: relative; aspect-ratio: 4 / 3; background: var(--line-soft); }
 .album-cover img { width: 100%; height: 100%; object-fit: cover; }
-.album-count { position: absolute; right: 10px; bottom: 10px; padding: 2px 9px; border-radius: 999px; background: rgba(18, 16, 12, 0.55); color: #fff; font-size: 11px; backdrop-filter: blur(4px); }
+.album-count { position: absolute; right: 10px; bottom: 10px; padding: 2px 9px; border-radius: 999px; background: rgba(18, 16, 12, 0.58); color: #fff; font-size: 11px; }
 .album-info { padding: 13px 16px 16px; }
 .album-info h3 { margin: 0 0 3px; font-size: 14.5px; font-weight: 600; }
 .album-info p { margin: 0; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .head-btns { display: flex; gap: 8px; }
 .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
 .photo { position: relative; margin: 0; border-radius: 10px; overflow: hidden; background: var(--surface); border: 1px solid var(--line); }
-.photo > img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; cursor: zoom-in; transition: transform 0.35s ease; }
+.photo > img { width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: cover; cursor: zoom-in; transition: transform 0.35s ease; }
 .photo:hover > img { transform: scale(1.03); }
 .photo figcaption { display: flex; align-items: center; justify-content: space-between; padding: 7px 11px; font-size: 11.5px; color: var(--muted); }
 .photo-like { display: inline-flex; align-items: center; gap: 3px; }
@@ -1115,21 +1115,28 @@ html[data-appearance='dark'] {
   --card-grad: linear-gradient(180deg, color-mix(in srgb, var(--card) 88%, #fff) 0%, var(--card) 60%);
 }
 
-body {
+/* 渐变底放在固定定位的伪元素上，并提升为独立合成层：
+   浏览器只需绘制一次，滚动时不再整屏重绘（background-attachment: fixed 的代价很高）。 */
+html { background: var(--bg); }
+body { background: transparent; }
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
   background:
     radial-gradient(58rem 40rem at 4% -12%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 68%),
     radial-gradient(48rem 34rem at 102% -6%, color-mix(in srgb, var(--warm) 9%, transparent), transparent 66%),
-    radial-gradient(40rem 30rem at 50% 108%, color-mix(in srgb, var(--cool) 7%, transparent), transparent 70%),
-    var(--bg);
-  background-attachment: fixed;
+    radial-gradient(40rem 30rem at 50% 108%, color-mix(in srgb, var(--cool) 7%, transparent), transparent 70%);
+  transform: translateZ(0);
 }
 
-html[data-appearance='dark'] body {
+html[data-appearance='dark'] body::before {
   background:
     radial-gradient(58rem 40rem at 2% -14%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 66%),
     radial-gradient(46rem 32rem at 104% -4%, color-mix(in srgb, var(--warm) 13%, transparent), transparent 64%),
-    radial-gradient(44rem 32rem at 50% 110%, color-mix(in srgb, var(--cool) 14%, transparent), transparent 70%),
-    var(--bg);
+    radial-gradient(44rem 32rem at 50% 110%, color-mix(in srgb, var(--cool) 14%, transparent), transparent 70%);
 }
 
 ::selection { background: color-mix(in srgb, var(--accent) 24%, transparent); }
@@ -1142,8 +1149,9 @@ html[data-appearance='dark'] body {
 /* ---------- 顶栏：玻璃 + 渐隐分隔 ---------- */
 .site-head {
   background: var(--glass);
-  backdrop-filter: blur(18px) saturate(1.45);
-  -webkit-backdrop-filter: blur(18px) saturate(1.45);
+  backdrop-filter: blur(12px) saturate(1.12);
+  -webkit-backdrop-filter: blur(12px) saturate(1.12);
+  contain: layout paint;
   border-bottom-color: color-mix(in srgb, var(--line) 68%, transparent);
 }
 .brand-mark {
@@ -1172,7 +1180,7 @@ html[data-appearance='dark'] body {
   transform: translateY(-1px);
   box-shadow: 0 16px 30px -16px color-mix(in srgb, var(--accent) 95%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.26);
 }
-.btn-ghost { background: color-mix(in srgb, var(--surface) 70%, transparent); backdrop-filter: blur(8px); }
+.btn-ghost { background: color-mix(in srgb, var(--surface) 78%, transparent); }
 .btn-ghost:hover { background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
 
 /* ---------- 版式节奏 ---------- */
@@ -1218,9 +1226,8 @@ html[data-appearance='dark'] body {
 .hero-stats span {
   padding: 6px 12px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.14);
   border: 1px solid rgba(255, 255, 255, 0.18);
-  backdrop-filter: blur(10px);
   font-size: 11.5px;
   opacity: 1;
 }
@@ -1231,8 +1238,7 @@ html[data-appearance='dark'] body {
 /* ---------- 两栏与侧栏 ---------- */
 .home-grid { gap: 30px; margin-top: 30px; }
 .rail-card {
-  background: color-mix(in srgb, var(--surface) 78%, transparent);
-  backdrop-filter: blur(12px);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
   border-color: color-mix(in srgb, var(--line) 76%, transparent);
   border-radius: 16px;
 }
@@ -1268,9 +1274,8 @@ html[data-appearance='dark'] body {
 .album-card:hover .album-shade { opacity: 0.95; }
 .album-count {
   right: 12px; bottom: 12px; padding: 3px 10px;
-  background: rgba(12, 11, 9, 0.46);
+  background: rgba(12, 11, 9, 0.55);
   border: 1px solid rgba(255, 255, 255, 0.18);
-  backdrop-filter: blur(10px);
   font-variant-numeric: tabular-nums;
 }
 .album-vis {
@@ -1278,9 +1283,8 @@ html[data-appearance='dark'] body {
   display: inline-flex; align-items: center; gap: 4px;
   height: 26px; padding: 0 10px 0 8px;
   border-radius: 999px; color: #fff; font-size: 11px; letter-spacing: 0.2px;
-  background: rgba(12, 11, 9, 0.5);
+  background: rgba(12, 11, 9, 0.55);
   border: 1px solid rgba(255, 255, 255, 0.22);
-  backdrop-filter: blur(10px);
 }
 .album-cover::after {
   content: ''; position: absolute; inset: 0; pointer-events: none;
@@ -1299,7 +1303,7 @@ html[data-appearance='dark'] .album-state.unlisted { background: #2c2415; color:
 /* ---------- 照片墙 ---------- */
 .photo-grid { gap: 16px; }
 .photo { border-radius: 14px; border-color: color-mix(in srgb, var(--line) 74%, transparent); }
-.photo > img { aspect-ratio: 4 / 3; transition: transform 0.6s var(--ease); }
+.photo > img { height: auto; aspect-ratio: 4 / 3; transition: transform 0.6s var(--ease); }
 .photo:hover > img { transform: scale(1.045); }
 .photo::after {
   content: ''; position: absolute; inset: 0; pointer-events: none;
@@ -1310,7 +1314,7 @@ html[data-appearance='dark'] .album-state.unlisted { background: #2c2415; color:
 .photo figcaption { background: color-mix(in srgb, var(--surface) 88%, transparent); border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); font-variant-numeric: tabular-nums; }
 .photo-tools { opacity: 0; transform: translateY(-4px); transition: opacity 0.2s, transform 0.2s; }
 .photo:hover .photo-tools, .photo:focus-within .photo-tools { opacity: 1; transform: none; }
-.photo-btn { backdrop-filter: blur(10px); background: rgba(255, 255, 255, 0.86); }
+.photo-btn { background: rgba(255, 255, 255, 0.9); }
 html[data-appearance='dark'] .photo-btn { background: rgba(30, 32, 28, 0.86); color: var(--ink); }
 
 /* ---------- 设置弹窗里的可见范围选择 ---------- */
@@ -1454,3 +1458,79 @@ html[data-appearance='dark'] .photo-btn { background: rgba(30, 32, 28, 0.86); co
 /* 分类胶囊：按分类取一个低饱和色相，给列表一点色彩节奏 */
 .pill.cat { background: hsl(var(--cat, 40) 64% 93%); color: hsl(var(--cat, 40) 40% 32%); }
 html[data-appearance='dark'] .pill.cat { background: hsl(var(--cat, 40) 26% 19%); color: hsl(var(--cat, 40) 58% 74%); }
+
+/* ---------- 曲库卡片补充：授权徽标、试听态、署名 ---------- */
+.lib-badge {
+  font-style: normal;
+  font-size: 10px;
+  letter-spacing: 0.3px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: color-mix(in srgb, var(--accent) 72%, var(--ink));
+}
+.lib-play.on {
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--line));
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+}
+.lib-credit {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 2px 0 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.lib-play.loading { opacity: 0.72; cursor: progress; }
+.lib-spin {
+  width: 11px; height: 11px; border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite;
+}
+
+
+/* =========================================================
+   性能：长列表跳过视口外渲染；低端设备与减少动效时降级
+   ========================================================= */
+
+/* 视口外的行不参与布局与绘制，长列表滚动更稳；给出估算高度避免滚动条跳动 */
+.post-row,
+.msg-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 92px;
+}
+
+/* 动效收敛：只动 transform / opacity，且时长更短 */
+.page { animation-duration: 0.3s; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* 手机 GPU 较弱：顶栏不再做背景模糊，用更实的底色保证可读性 */
+@media (max-width: 720px) {
+  .site-head {
+    background: color-mix(in srgb, var(--bg) 94%, transparent);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .modal-mask { backdrop-filter: none; }
+}
+
+/* 路由进度条 */
+#route-bar {
+  position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 300;
+  pointer-events: none; opacity: 0; transform: scaleX(0); transform-origin: 0 50%;
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 45%, #fff));
+  transition: transform 0.5s var(--ease), opacity 0.2s ease;
+}
+#route-bar.on { opacity: 1; transform: scaleX(0.7); }
+#route-bar.done { opacity: 0; transform: scaleX(1); transition: transform 0.22s ease, opacity 0.22s ease; }

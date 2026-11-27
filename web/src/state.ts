@@ -45,3 +45,20 @@ export function applyTheme(id: string): void {
   document.documentElement.dataset.theme = theme?.id ?? 'aurora';
   if (theme) document.documentElement.style.setProperty('--theme-accent', theme.accent);
 }
+
+/**
+ * 视图级事件生命周期。
+ *
+ * 每次路由切换前统一 abort，视图里挂到 window / document 的监听器
+ * 用 { signal: viewSignal() } 注册即可自动回收，避免反复进出页面时叠加。
+ */
+let viewAC = new AbortController();
+
+export function viewSignal(): AbortSignal {
+  return viewAC.signal;
+}
+
+export function resetViewAbort(): void {
+  viewAC.abort();
+  viewAC = new AbortController();
+}

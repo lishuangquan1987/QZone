@@ -1,7 +1,7 @@
 import { api, type PostView } from '../api';
 import { featuredHTML, postRowHTML } from '../components';
 import { bgm } from '../music';
-import { me } from '../state';
+import { me, viewSignal } from '../state';
 import { avatarHTML, bindLightbox, esc, icon, skeleton, timeAgo, toast } from '../ui';
 import type { ViewCtx } from '../types';
 
@@ -78,7 +78,7 @@ export async function renderHome(root: HTMLElement, ctx: ViewCtx): Promise<void>
           <div class="rail-disc ${bgmPlaying() ? 'spin' : ''}">${icon('music', 16)}</div>
           <div class="rail-music-meta">
             <b>${esc(u.bgmTitle || '未设置音轨')}</b>
-            <span>${u.bgmUrl ? '正在循环播放' : '去设置里上传一首'}</span>
+            <span id="rail-music-state">${u.bgmUrl ? (bgmPlaying() ? '正在循环播放' : '已暂停 · 点下面的按钮继续') : '去设置里挑一首'}</span>
           </div>
         </div>
         <button class="btn btn-ghost btn-sm btn-block" id="rail-play">
@@ -93,7 +93,7 @@ export async function renderHome(root: HTMLElement, ctx: ViewCtx): Promise<void>
             .slice(0, 3)
             .map(
               (a) => `<a class="rail-album" href="#/album/${a.id}">
-                <img src="${esc(a.cover)}" alt="">
+                <img src="${esc(a.cover)}" alt="" loading="lazy" decoding="async">
                 <span>${esc(a.name)}</span>
               </a>`,
             )
@@ -108,11 +108,18 @@ export async function renderHome(root: HTMLElement, ctx: ViewCtx): Promise<void>
       </section>`;
 
     const playBtn = rail.querySelector<HTMLElement>('#rail-play');
-    window.addEventListener('qz:bgm', () => {
-      if (!playBtn) return;
-      rail.querySelector('.rail-disc')?.classList.toggle('spin', bgm.isPlaying());
-      playBtn.innerHTML = `${bgm.isPlaying() ? icon('pause', 13) : icon('play', 13)} ${bgm.isPlaying() ? '暂停' : '播放'}`;
-    });
+    const stateText = rail.querySelector<HTMLElement>('#rail-music-state');
+    window.addEventListener(
+      'qz:bgm',
+      () => {
+        if (!playBtn || !playBtn.isConnected) return;
+        const playing = bgm.isPlaying();
+        rail.querySelector('.rail-disc')?.classList.toggle('spin', playing);
+        playBtn.innerHTML = `${playing ? icon('pause', 13) : icon('play', 13)} ${playing ? '暂停' : '播放'}`;
+        if (stateText) stateText.textContent = playing ? '正在循环播放' : '已暂停 · 点下面的按钮继续';
+      },
+      { signal: viewSignal() },
+    );
     playBtn?.addEventListener('click', () => {
       bgm.toggle();
     });

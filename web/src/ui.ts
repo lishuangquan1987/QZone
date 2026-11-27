@@ -90,7 +90,7 @@ export function icon(name: string, size = 16): string {
 
 export function avatarHTML(avatar: string, nickname: string, size = 40, uin = '', level = 0): string {
   const inner = avatar
-    ? `<img src="${esc(avatar)}" alt="${esc(nickname)}" loading="lazy">`
+    ? `<img src="${esc(avatar)}" alt="${esc(nickname)}" loading="lazy" decoding="async">`
     : `<span class="avatar-fallback">${esc(nickname.slice(0, 1))}</span>`;
   const href = uin ? `href="#/u/${esc(uin)}"` : '';
   const style = size > 0 ? ` style="width:${size}px;height:${size}px"` : '';
@@ -239,7 +239,7 @@ export function openLightbox(items: LightboxItem[], start = 0, trigger?: HTMLEle
     strip.innerHTML = items
       .map(
         (it, i) =>
-          `<button class="lx-thumb" data-i="${i}" aria-label="第 ${i + 1} 张"><img src="${esc(it.src)}" alt="" loading="lazy"></button>`,
+          `<button class="lx-thumb" data-i="${i}" aria-label="第 ${i + 1} 张"><img src="${esc(it.src)}" alt="" loading="lazy" decoding="async"></button>`,
       )
       .join('');
   } else {

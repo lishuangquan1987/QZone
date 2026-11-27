@@ -2,14 +2,17 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"os"
 	"path"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"qzone/ent"
@@ -97,13 +100,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/notifications/read", s.auth(s.readNotifications))
 	mux.HandleFunc("GET /api/search", s.auth(s.search))
 	mux.HandleFunc("GET /api/music/library", s.auth(s.musicLibrary))
+	mux.HandleFunc("GET /api/music/stream", s.auth(s.musicStream))
 
 	mux.HandleFunc("POST /api/upload", s.auth(s.uploadImage))
 	mux.HandleFunc("POST /api/upload/audio", s.auth(s.uploadAudio))
 
 	mux.Handle("/media/", http.StripPrefix("/media/", s.mediaHandler()))
 	mux.Handle("/", s.spaHandler())
-	return securityHeaders(mux)
+	return securityHeaders(withCompression(mux))
 }
 
 // securityHeaders 补几个成本极低、收益明确的响应头。
@@ -366,6 +370,12 @@ func (s *Server) spaHandler() http.Handler {
 						w.Header().Add(k, v)
 					}
 				}
+				// assets 下的文件名带内容哈希，可以放心长缓存；其它静态文件一周
+				if strings.HasPrefix(clean, "/assets/") {
+					w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+				} else {
+					w.Header().Set("Cache-Control", "public, max-age=604800")
+				}
 				w.WriteHeader(rec.status)
 				_, _ = w.Write(rec.body)
 				return
@@ -383,10 +393,32 @@ func (s *Server) spaHandler() http.Handler {
 <body style="font-family:system-ui;padding:40px">前端尚未构建，请先执行 <code>cd web &amp;&amp; npm run build</code>。</body>`))
 			return
 		}
+		// 入口文件每次都要回源确认（1KB 左右，代价很小），但用 ETag 让重复访问直接 304
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache")
+		etag := indexETag(index)
+		w.Header().Set("ETag", etag)
+		if match := r.Header.Get("If-None-Match"); match != "" && strings.Contains(match, etag) {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
 		_, _ = w.Write(index)
 	})
 }
+
+// indexETag 用内容哈希做入口文件的 ETag（同一份构建产物只算一次）。
+func indexETag(body []byte) string {
+	indexETagOnce.Do(func() {
+		sum := sha256.Sum256(body)
+		indexETagCache = `"` + fmt.Sprintf("%x", sum[:8]) + `"`
+	})
+	return indexETagCache
+}
+
+var (
+	indexETagOnce  sync.Once
+	indexETagCache string
+)
 
 type statusRecorder struct {
 	header http.Header

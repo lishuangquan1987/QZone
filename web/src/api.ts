@@ -130,6 +130,9 @@ export interface MusicTrack {
   duration: number;
   url: string;
   source: string;
+  kind?: 'builtin' | 'remote';
+  license?: string;
+  credit?: string;
 }
 
 export interface Theme {
@@ -150,7 +153,37 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * GET 结果短期缓存。
+ *
+ * 站内来回切换（首页 ↔ 文章 ↔ 相册）时不必每次重新拉一遍，
+ * 15 秒内直接复用；任何写操作或登录态变化都会整体失效。
+ */
+const readCache = new Map<string, { at: number; data: unknown }>();
+const READ_TTL = 15000;
+const cacheablePath = (p: string) => /^\/api\/(posts|albums|guestbook|users|search|music\/library)/.test(p);
+
+export function clearApiCache(): void {
+  readCache.clear();
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const isRead = !init.method || init.method === 'GET';
+  const useCache = isRead && cacheablePath(path);
+  if (useCache) {
+    const hit = readCache.get(path);
+    if (hit && Date.now() - hit.at < READ_TTL) return hit.data as T;
+  }
+
+  const remember = (data: unknown): void => {
+    // 只有写操作才需要让缓存整体失效；未缓存的读接口（通知、会话）不得误清
+    if (!isRead) {
+      readCache.clear();
+      return;
+    }
+    if (useCache) readCache.set(path, { at: Date.now(), data });
+  };
+
   // 静态演示模式：请求交给浏览器内的模拟后端（GitHub Pages 托管时使用）
   if (DEMO) {
     // 演示后端单独成 chunk，正式部署不会加载
@@ -161,6 +194,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       throw new ApiError(401, (res.body as { error?: string }).error ?? '登录状态已失效');
     }
     if (res.status >= 400) throw new ApiError(res.status, (res.body as { error?: string }).error ?? '请求失败');
+    remember(res.body);
     return res.body as T;
   }
 
@@ -179,6 +213,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const raw = await res.text();
   const data = raw ? JSON.parse(raw) : {};
   if (!res.ok) throw new ApiError(res.status, (data as { error?: string }).error || '请求失败');
+  remember(data);
   return data as T;
 }
 
@@ -204,7 +239,10 @@ export const api = {
     post<{ user: UserView; unread: number }>('/api/auth/register', { uin, nickname, password }),
   login: (uin: string, password: string) =>
     post<{ user: UserView; unread: number }>('/api/auth/login', { uin, password }),
-  logout: () => post<{ ok: boolean }>('/api/auth/logout'),
+  logout: () => {
+    clearApiCache();
+    return post<{ ok: boolean }>('/api/auth/logout');
+  },
   session: () => get<{ authenticated: boolean; user?: UserView; unread?: number }>('/api/auth/session'),
 
   bootstrap: () => get<{ me: UserView; unread: number; themes: Theme[] }>('/api/bootstrap'),

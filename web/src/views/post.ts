@@ -43,7 +43,7 @@ export async function renderPost(root: HTMLElement, ctx: ViewCtx): Promise<void>
 
       ${
         p.cover && !(p.content ?? '').includes(p.cover)
-          ? `<figure class="article-cover"><img src="${esc(p.cover)}" alt="" data-zoom="${esc(p.cover)}"></figure>`
+          ? `<figure class="article-cover"><img src="${esc(p.cover)}" alt="" decoding="async" data-zoom="${esc(p.cover)}"></figure>`
           : ''
       }
 

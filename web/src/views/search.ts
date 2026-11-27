@@ -49,7 +49,7 @@ export async function renderSearch(root: HTMLElement, ctx: ViewCtx): Promise<voi
              <div class="card user-list">${r.users
                .map(
                  (u) => `<a class="user-row" href="#/u/${esc(u.uin)}">
-                   <img src="${esc(u.avatar)}" alt="">
+                   <img src="${esc(u.avatar)}" alt="" loading="lazy" decoding="async">
                    <div><b>${esc(u.nickname)}</b><span>@${esc(u.uin)} · ${esc(u.signature || '')}</span></div>
                    ${icon('chevron', 14)}
                  </a>`,
@@ -69,7 +69,7 @@ export async function renderSearch(root: HTMLElement, ctx: ViewCtx): Promise<voi
              <div class="album-grid">${r.albums
                .map(
                  (a) => `<a class="album-card card" href="#/album/${a.id}">
-                   <div class="album-cover">${a.cover ? `<img src="${esc(a.cover)}" alt="">` : ''}</div>
+                   <div class="album-cover">${a.cover ? `<img src="${esc(a.cover)}" alt="" loading="lazy" decoding="async">` : ''}</div>
                    <div class="album-info"><h3>${esc(a.name)}</h3><p>${a.count} 张</p></div>
                  </a>`,
                )

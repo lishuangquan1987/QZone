@@ -29,7 +29,7 @@ const VIS_LABEL: Record<string, string> = {
 export function featuredHTML(p: PostView): string {
   const cover = p.cover || p.images[0] || '';
   return `<article class="feature card${cover ? '' : ' no-cover'}" data-post="${p.id}">
-    ${cover ? `<a class="feature-cover" href="#/post/${p.id}"><img src="${esc(cover)}" alt="${esc(p.title)}" loading="lazy"></a>` : ''}
+    ${cover ? `<a class="feature-cover" href="#/post/${p.id}"><img src="${esc(cover)}" alt="${esc(p.title)}" loading="lazy" decoding="async"></a>` : ''}
     <div class="feature-body">
       <div class="post-kicker">
         ${p.pinned ? `<span class="pill pill-pin">${icon('pin', 11)}置顶</span>` : ''}
@@ -73,7 +73,7 @@ export function postRowHTML(p: PostView): string {
         <span>${icon('heart', 12)} ${p.likeCount}</span>
       </div>
     </div>
-    ${cover ? `<a class="post-row-thumb" href="#/post/${p.id}"><img src="${esc(cover)}" alt="" loading="lazy"></a>` : ''}
+    ${cover ? `<a class="post-row-thumb" href="#/post/${p.id}"><img src="${esc(cover)}" alt="" loading="lazy" decoding="async"></a>` : ''}
   </article>`;
 }
 
@@ -107,7 +107,7 @@ export function albumCardHTML(a: AlbumView): string {
       : `<span class="album-vis">${icon(a.privacy === 'private' ? 'lock' : 'eyeoff', 12)}${a.privacy === 'private' ? '仅自己' : '隐藏'}</span>`;
   return `<a class="album-card card" href="#/album/${a.id}">
     <div class="album-cover">
-      ${a.cover ? `<img src="${esc(a.cover)}" alt="${esc(a.name)}" loading="lazy">` : `<div class="cover-fallback"></div>`}
+      ${a.cover ? `<img src="${esc(a.cover)}" alt="${esc(a.name)}" loading="lazy" decoding="async">` : `<div class="cover-fallback"></div>`}
       <span class="album-count">${a.count} 张</span>
       ${vis}
       <span class="album-shade" aria-hidden="true"></span>
