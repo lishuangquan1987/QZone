@@ -133,6 +133,24 @@ docker run -d -p 8080:8080 -v $PWD/data:/data ghcr.io/lishuangquan1987/qzone:lat
 
 ---
 
+## 性能
+
+自建部署没有 CDN，所以性能主要靠服务端与渲染层自己兜住：
+
+| 优化 | 做法 | 效果 |
+| --- | --- | --- |
+| 传输压缩 | `internal/api/gzip.go`：文本类响应按 1KB 阈值 gzip，音频与 `Range` 请求直接放行 | JS 156KB → **52KB**，CSS 65KB → 14KB |
+| 静态缓存 | `/assets/*` 带内容哈希 → `max-age=31536000, immutable`；其它静态资源一周；入口 HTML `no-cache` + ETag（命中 304） | 回访几乎零下载 |
+| 滚动流畅 | 极光渐变底从 `background-attachment: fixed` 改为固定定位伪元素 + `translateZ(0)` 独立图层 | 滚动时不再整屏重绘 |
+| 合成开销 | 全站 12 处 `backdrop-filter` 收敛到 4 处（顶栏降到 12px、手机端关闭） | 减少每帧模糊层 |
+| 长列表 | 文章行 / 消息行 `content-visibility: auto` + 估算高度 | 视口外不参与排版绘制 |
+| 图片 | 统一 `loading="lazy"` + `decoding="async"`，照片带 `width/height` 预留位 | 不阻塞首帧、无布局抖动 |
+| 数据复用 | `web/src/api.ts` 的 GET 结果 15 秒内存缓存，任何写操作整体失效 | 站内来回切换 30ms 左右 |
+| 感知速度 | 路由超过 150ms 才显示顶部进度条；写作页离开补存草稿 | 慢请求有反馈，不闪一下 |
+| 事件回收 | 视图级 `AbortController`，路由切换统一 abort | 反复进出首页不再叠加监听器 |
+
+实测（1440×950，Slow 4G + 4× CPU 限速）：FCP **924ms**、首屏传输 JS **51KB** / CSS **14KB**；本地路由切换 30–70ms，无 50ms 以上长任务。
+
 ## 设计系统
 
 界面按「编辑型个人博客」定调，而不是社交产品的旧版式。
@@ -196,7 +214,10 @@ docker run -d -p 8080:8080 -v $PWD/data:/data ghcr.io/lishuangquan1987/qzone:lat
 - 访客：谁看过我 / 我看过谁，累计与今日人次
 
 **背景音乐（真实播放）**
-- 内置 3 首免费曲目（夜航 / 晨雾 / 远山），由服务端程序合成，无版权限制，可直接试听与选用
+- **在线免费曲库 7 首**：来自 [incompetech.com](https://incompetech.com) 的 Kevin MacLeod，**CC BY 4.0**（可免费用作背景音乐，保留署名）。清单在 `web/src/music-tracks.ts`，设置页可逐首试听、一键设为背景
+  - 播放统一走 `GET /api/music/stream?u=...` 同源反代：服务端只放行白名单主机与前缀，返回 `audio/mpeg` 并透传 `Range`，解决第三方返回 `application/octet-stream`（Safari 易拒播）与跨境慢的问题
+  - 演示站（GitHub Pages）没有后端，自动退回原始直链
+- 内置 3 首合成曲目（夜航 / 晨雾 / 远山），服务端程序生成，无版权顾虑，没有外网也能播
 - 也支持上传本地音频（MP3 / M4A / OGG / WAV / FLAC，单个 ≤ 50MB，可用 `-max-audio` 调整）或填写公开音频直链
 - 左下角播放器：唱片旋转、播放 / 暂停、音量、循环，状态记在 localStorage；遵守浏览器自动播放策略，首次交互后开始
 - **关于 QQ 音乐**：其播放接口需要签名与版权授权（实测搜索返回 `code 2001`），本项目不抓取；如需自有曲库可在此基础上接授权 API，接口层已把「曲目来源」抽象成 `url + title`
@@ -257,7 +278,8 @@ User ─┬─< Post ─< Comment
 | GET | `/api/search?q=` | 全站搜索 |
 | POST | `/api/upload` | 图片上传（默认 ≤30MB） |
 | POST | `/api/upload/audio` | 音频上传（默认 ≤50MB） |
-| GET | `/api/music/library` | 内置免费音乐库 |
+| GET | `/api/music/library` | 内置合成曲库 |
+| GET | `/api/music/stream?u=` | 白名单免费音源的反代（支持 Range） |
 
 ---
 
@@ -290,3 +312,4 @@ node tools/e2e.cjs
 - 图片上传前会在浏览器端压到 WebP，但没有服务端缩略图；大量高清图时建议接对象存储 + 图片处理。
 - 删除文章 / 相册只删数据库记录，磁盘上的原图不会自动清理。
 - 示例素材（头像 / 封面 / 照片）是程序生成的渐变 SVG，仅用于演示。
+- 在线曲库依赖 incompetech.com 可用性；服务端反代有 15 秒首字节超时，失败时退回内置曲目即可。若要商用请遵守 CC BY 4.0 署名，或购买其授权。

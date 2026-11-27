@@ -65,6 +65,20 @@
 | Markdown 链接可执行 `javascript:` | `renderMarkdown()` 加了基于 `<template>` 的协议过滤，只保留 http(s)/mailto/站内路径 |
 | 启动日志地址拼接错误 | `http://localhost%s` 与 `127.0.0.1:8123` 拼成 `localhost127.0.0.1`，按 `:port` / `0.0.0.0:port` 归一化 |
 
+### 第三轮：性能与曲库
+
+| 问题 | 处理 |
+| --- | --- |
+| 一次访问要拉 156KB JS + 65KB CSS，自建部署没有压缩 | 新增 gzip 中间件（文本类 ≥1KB 才压，音频与 Range 放行），实测 JS 51KB / CSS 14KB |
+| 静态资源无缓存头，每次回访全量重下 | `/assets/*` 内容哈希 → 一年 immutable；入口 HTML `no-cache` + ETag，命中 304 |
+| 滚动发涩 | `background-attachment: fixed` 的多层径向渐变改为固定伪元素独立图层；`backdrop-filter` 从 12 处收敛到 4 处，手机端顶栏直接关闭 |
+| 长列表一次渲染到底 | 文章行 / 消息行加 `content-visibility: auto` |
+| 图片解码抢占主线程、无占位 | 统一 `decoding="async"`、照片补 `width/height`；修掉由此引起的照片被拉成长条的回归 |
+| 站内来回切换每次都重新请求 | GET 结果 15 秒内存缓存，写操作与登出整体失效；实测回访 30ms 级 |
+| 首页音乐卡反复进出叠加监听器 | 引入视图级 `AbortController`，路由切换统一 abort；顺带修「已暂停却显示正在循环播放」 |
+| 慢接口没有任何反馈 | 路由超过 150ms 才出现的顶部进度条 |
+| 曲库只有 3 首合成音轨，演示站还没有声音 | 新增 7 首 CC BY 4.0 免费曲目（incompetech.com），设置页可试听 / 设为背景；播放走白名单反代，统一 `audio/mpeg` 并支持 Range；演示站退回直链 |
+
 ## 二、这次改了什么
 
 | 文件 | 改动 |
