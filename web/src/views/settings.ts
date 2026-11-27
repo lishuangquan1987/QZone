@@ -1,5 +1,6 @@
 import { api } from '../api';
 import { bgm } from '../music';
+import { mmss, REMOTE_CREDIT, REMOTE_TRACKS, streamURL } from '../music-tracks';
 import { applyTheme, me, setMe, themes } from '../state';
 import { getMode, setMode, type Mode } from '../theme';
 import { esc, icon, toast } from '../ui';
@@ -119,16 +120,20 @@ export async function renderSettings(root: HTMLElement, ctx: ViewCtx): Promise<v
 
   if (tab === 'music') {
     body.innerHTML = `<section class="card setting-card">
-      <h2 class="setting-title">内置免费音乐</h2>
-      <p class="setting-hint">曲目由程序实时合成，无版权限制；点「试听」立即播放，「设为背景音乐」保存到你的空间。</p>
-      <div class="music-library" id="music-library"><span class="muted">加载中…</span></div>
+      <h2 class="setting-title">在线免费曲库</h2>
+      <p class="setting-hint">来自 Kevin MacLeod 的 incompetech.com，<b>CC BY 4.0</b> 授权，可免费用作背景音乐。播放走本站代理，避开跨域与格式兼容问题。</p>
+      <div class="music-library" id="music-online"><span class="muted">加载中…</span></div>
+
+      <h2 class="setting-title">内置合成曲目</h2>
+      <p class="setting-hint">程序实时合成，完全无版权顾虑，没有外网也能播放。</p>
+      <div class="music-library" id="music-builtin"><span class="muted">加载中…</span></div>
 
       <h2 class="setting-title">当前背景音乐</h2>
       <div class="music-current">
         <div class="music-disc ${bgm.isPlaying() ? 'spin' : ''}">${icon('music', 16)}</div>
         <div class="music-current-meta">
           <b id="bgm-name">${esc(u.bgmTitle || '还没有设置音轨')}</b>
-          <span id="bgm-sub">${u.bgmUrl ? '已保存，会在页面左下角循环播放' : '上传、选一首内置曲目，或填写直链'}</span>
+          <span id="bgm-sub">${u.bgmUrl ? '已保存，会在页面左下角循环播放' : '从上面的曲库挑一首，或上传自己的音频'}</span>
         </div>
         <button class="btn btn-ghost btn-sm" id="preview-btn">${icon('play', 13)} 试听</button>
       </div>
@@ -154,7 +159,7 @@ export async function renderSettings(root: HTMLElement, ctx: ViewCtx): Promise<v
         <button class="btn btn-primary btn-sm" id="bgm-url-save">使用</button>
       </div>
       <p class="setting-hint" style="margin-top:14px">
-        说明：QQ 音乐等平台的播放接口需要签名与版权授权，本项目不抓取这些内容；这里提供的是可自由使用的合成曲目、你自己上传的音频，或你有权使用的直链。
+        说明：QQ 音乐等平台的播放接口需要签名与版权授权，本项目不抓取这些内容。在线曲库为 CC BY 4.0（署名：Kevin MacLeod, incompetech.com），内置曲目由程序合成，你也可以上传自己的音频或填写有权使用的直链。
       </p>
     </section>`;
 
@@ -165,7 +170,7 @@ export async function renderSettings(root: HTMLElement, ctx: ViewCtx): Promise<v
       (body.querySelector('#bgm-name') as HTMLElement).textContent = pendingTitle || '还没有设置音轨';
       (body.querySelector('#bgm-sub') as HTMLElement).textContent = pendingUrl
         ? '已选择，保存后生效'
-        : '上传、选一首内置曲目，或填写直链';
+        : '从上面的曲库挑一首，或上传自己的音频';
       if (!(body.querySelector('#bgm-title') as HTMLInputElement).value) {
         (body.querySelector('#bgm-title') as HTMLInputElement).value = pendingTitle;
       }
@@ -178,43 +183,104 @@ export async function renderSettings(root: HTMLElement, ctx: ViewCtx): Promise<v
       syncCurrent();
     };
 
-    // 内置曲库
+    // 曲库：在线免费 + 内置合成。试听用独立 Audio，避免把当前背景音乐顶掉。
+    let preview: HTMLAudioElement | null = null;
+    let previewKey = '';
+
+    const stopPreview = () => {
+      if (preview) {
+        preview.pause();
+        preview.src = '';
+        preview = null;
+      }
+      previewKey = '';
+      body.querySelectorAll<HTMLElement>('.lib-play').forEach((b) => {
+        b.classList.remove('on');
+        b.innerHTML = `${icon('play', 12)}<span>试听</span>`;
+      });
+    };
+    // 离开设置页时停掉试听，避免声音跟着走
+    window.addEventListener('hashchange', stopPreview, { once: true });
+
+    const cardHTML = (o: { id: string; title: string; mood: string; seconds: number; url: string; badge: string }) => `
+      <article class="lib-card" data-id="${esc(o.id)}">
+        <div class="lib-main">
+          <b>${esc(o.title)}</b>
+          <span>${esc(o.mood)} · ${mmss(o.seconds)}${o.badge ? ` · <em class="lib-badge">${esc(o.badge)}</em>` : ''}</span>
+        </div>
+        <div class="lib-actions">
+          <button class="btn btn-ghost btn-sm lib-play" data-play="${esc(o.url)}" data-key="${esc(o.id)}">${icon('play', 12)}<span>试听</span></button>
+          <button class="btn btn-soft btn-sm" data-pick="${esc(o.url)}" data-title="${esc(o.title)}">设为背景</button>
+        </div>
+      </article>`;
+
+    const online = body.querySelector<HTMLElement>('#music-online')!;
+    online.innerHTML =
+      REMOTE_TRACKS.map((t) => cardHTML({ ...t, url: streamURL(t), badge: 'CC BY' })).join('') +
+      `<p class="lib-credit">${icon('music', 11)} 署名：${esc(REMOTE_CREDIT)}</p>`;
+
     try {
       const { tracks } = await api.musicLibrary();
-      const box = body.querySelector('#music-library')!;
-      box.innerHTML = tracks
-        .map(
-          (t) => `<article class="lib-card" data-id="${esc(t.id)}">
-            <div class="lib-main">
-              <b>${esc(t.title)}</b>
-              <span>${esc(t.mood)} · ${t.duration} 秒</span>
-            </div>
-            <div class="lib-actions">
-              <button class="btn btn-ghost btn-sm" data-play="${esc(t.url)}" data-title="${esc(t.title)}">${icon('play', 12)} 试听</button>
-              <button class="btn btn-soft btn-sm" data-pick="${esc(t.url)}" data-title="${esc(t.title)}">设为背景</button>
-            </div>
-          </article>`,
-        )
-        .join('');
+      body.querySelector<HTMLElement>('#music-builtin')!.innerHTML = tracks.length
+        ? tracks
+            .map((t) =>
+              cardHTML({ id: t.id, title: t.title, mood: t.mood, seconds: t.duration, url: t.url, badge: '无版权' }),
+            )
+            .join('')
+        : `<p class="muted">没有内置曲目</p>`;
+    } catch (err) {
+      body.querySelector<HTMLElement>('#music-builtin')!.innerHTML =
+        `<span class="muted">曲库加载失败：${esc((err as Error).message)}</span>`;
+    }
 
-      box.addEventListener('click', (e) => {
-        const t = e.target as HTMLElement;
-        const play = t.closest<HTMLElement>('[data-play]');
-        if (play) {
-          bgm.setTrack(play.dataset.play!, play.dataset.title!);
-          if (!bgm.isPlaying()) bgm.toggle();
-          body.querySelector('.music-disc')?.classList.add('spin');
+    body.querySelector('.setting-card')!.addEventListener('click', (e) => {
+      const t = e.target as HTMLElement;
+      const play = t.closest<HTMLElement>('.lib-play');
+      if (play) {
+        const url = play.dataset.play!;
+        const key = play.dataset.key ?? url;
+        if (previewKey === key && preview && !preview.paused) {
+          stopPreview();
           return;
         }
-        const pickBtn = t.closest<HTMLElement>('[data-pick]');
-        if (pickBtn) {
-          pick(pickBtn.dataset.pick!, pickBtn.dataset.title!);
-          toast(`已选择《${pickBtn.dataset.title}》，记得点保存`, 'ok');
-        }
-      });
-    } catch (err) {
-      body.querySelector('#music-library')!.innerHTML = `<span class="muted">曲库加载失败：${esc((err as Error).message)}</span>`;
-    }
+        stopPreview();
+        const audio = new Audio(url);
+        preview = audio;
+        audio.volume = 0.7;
+        previewKey = key;
+        play.classList.add('loading');
+        play.innerHTML = `<span class="lib-spin"></span><span>载入中</span>`;
+        audio.addEventListener('ended', stopPreview, { once: true });
+        audio.addEventListener(
+          'playing',
+          () => {
+            if (preview !== audio) return;
+            play.classList.remove('loading');
+            play.classList.add('on');
+            play.innerHTML = `${icon('pause', 12)}<span>暂停</span>`;
+          },
+          { once: true },
+        );
+        audio.addEventListener(
+          'error',
+          () => {
+            stopPreview();
+            toast('试听失败：音源暂时不可用，换一首或稍后再试', 'err');
+          },
+          { once: true },
+        );
+        void audio.play().catch(() => {
+          stopPreview();
+          toast('试听失败：音源暂时不可用，换一首或稍后再试', 'err');
+        });
+        return;
+      }
+      const pickBtn = t.closest<HTMLElement>('[data-pick]');
+      if (pickBtn) {
+        pick(pickBtn.dataset.pick!, pickBtn.dataset.title!);
+        toast(`已选择《${pickBtn.dataset.title}》，记得点保存`, 'ok');
+      }
+    });
 
     // 上传
     const audioInput = body.querySelector<HTMLInputElement>('#audio-file')!;

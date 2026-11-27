@@ -1100,14 +1100,8 @@ export async function demoRequest(path: string, init: RequestInit = {}): Promise
 
   /* ---------- 音乐 ---------- */
   if (r[0] === 'music' && r[1] === 'library') {
-    return ok({
-      tracks: [
-        { id: 'demo-1', title: '夜航（演示）', mood: '安静', duration: 0, url: '', source: 'builtin' },
-        { id: 'demo-2', title: '晨雾（演示）', mood: '清晨', duration: 0, url: '', source: 'builtin' },
-        { id: 'demo-3', title: '远山（演示）', mood: '辽阔', duration: 0, url: '', source: 'builtin' },
-      ],
-      note: '演示模式不包含音频文件，上传本地音频或填写直链即可播放。',
-    });
+    // 演示站没有后端与内置音频文件，只展示前端维护的在线免费曲库
+    return ok({ tracks: [], note: '演示模式没有内置音频；在线免费曲库可直接试听与使用。' });
   }
 
   /* ---------- 搜索 ---------- */
