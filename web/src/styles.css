@@ -816,16 +816,119 @@ textarea.input { resize: vertical; line-height: 1.8; }
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 14px;
+  padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--surface);
+  min-width: 0;
+  transition: border-color 0.18s ease, transform 0.18s ease, background 0.18s ease;
+}
+
+.lib-card:hover { border-color: color-mix(in srgb, var(--accent) 42%, var(--line)); transform: translateY(-1px); }
+.lib-card.picked { border-color: var(--accent); background: var(--accent-soft); }
+
+.lib-cover {
+  width: 42px;
+  height: 42px;
+  flex: none;
+  border-radius: 9px;
+  object-fit: cover;
+  background: var(--surface-2);
+  box-shadow: 0 4px 12px -8px rgba(0, 0, 0, 0.6);
+}
+
+.lib-cover-ph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  border: 1px dashed var(--line);
+  box-shadow: none;
 }
 
 .lib-main { flex: 1; min-width: 0; }
-.lib-main b { display: block; font-size: 14px; }
+.lib-main b {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .lib-main span { font-size: 11.5px; color: var(--muted); }
-.lib-actions { display: flex; gap: 6px; }
+.lib-actions { display: flex; gap: 6px; flex: none; }
+.lib-actions .lib-play { padding: 6px 10px; min-width: 32px; justify-content: center; }
+
+/* 分组标签 */
+.lib-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0 12px;
+}
+
+.lib-tab {
+  padding: 6px 13px;
+  font-size: 12.5px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  transition: 0.16s ease;
+}
+
+.lib-tab:hover { color: var(--ink); border-color: color-mix(in srgb, var(--accent) 42%, var(--line)); }
+.lib-tab.on {
+  color: var(--on-accent);
+  background: var(--accent);
+  border-color: transparent;
+}
+
+.lib-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  margin-bottom: 8px;
+  min-width: 0;
+}
+
+@media (min-width: 760px) {
+  .lib-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* 折叠区：内置曲目 / 上传 */
+.fold {
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.fold summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fold summary::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-right: 1.6px solid var(--muted);
+  border-bottom: 1.6px solid var(--muted);
+  transform: rotate(-45deg);
+  transition: transform 0.18s ease;
+  margin-right: 3px;
+}
+
+.fold[open] summary::before { transform: rotate(45deg); }
+.fold summary::-webkit-details-marker { display: none; }
+.fold .music-library { margin-top: 12px; }
 
 /* =========================================================
    写作工作台：整页铺满、可拖拽分屏、大纲抽屉

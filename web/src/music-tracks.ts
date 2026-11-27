@@ -1,43 +1,90 @@
 import { DEMO } from './env';
 
 /**
- * 站外免费曲库。
+ * 在线曲库的数据形状。
  *
- * 全部来自 Kevin MacLeod 的 incompetech.com，授权为 CC BY 4.0：
- * 可免费用于个人站点背景音乐，需保留署名（页面上已展示，README 亦有说明）。
- * 这里只存原始直链；真实部署时统一走 /api/music/stream 反代，
- * 由服务端补上 audio/mpeg 与 Range，浏览器兼容性更稳。
+ * 曲目清单由服务端维护（internal/api/music.go），前端只负责展示：
+ * 播放地址统一走 /api/music/stream?mid=xxx，服务端实时换取 vkey 后转发音频流，
+ * 所以保存下来的地址长期有效，换设备也不会失效。
  */
-export interface RemoteTrack {
+export interface Track {
   id: string;
+  kind?: 'builtin' | 'online';
   title: string;
-  mood: string;
-  seconds: number;
+  artist?: string;
+  album?: string;
+  group?: string;
+  mood?: string;
+  duration: number;
+  cover?: string;
   url: string;
+  source?: string;
 }
 
-const BASE = 'https://incompetech.com/music/royalty-free/mp3-royaltyfree/';
+export interface TrackGroup {
+  key: string;
+  label: string;
+  desc: string;
+}
 
-// 这里保留原始文件名（含空格），编码交给使用方做一次，避免二次编码
-const f = (name: string) => BASE + name;
-
-export const REMOTE_TRACKS: RemoteTrack[] = [
-  { id: 'mc-medi01', title: 'Meditation Impromptu 01', mood: '安静 · 钢琴', seconds: 213, url: f('Meditation Impromptu 01.mp3') },
-  { id: 'mc-medi02', title: 'Meditation Impromptu 02', mood: '安静 · 夜读', seconds: 249, url: f('Meditation Impromptu 02.mp3') },
-  { id: 'mc-medi03', title: 'Meditation Impromptu 03', mood: '安静 · 舒展', seconds: 255, url: f('Meditation Impromptu 03.mp3') },
-  { id: 'mc-dreamer', title: 'Dreamer', mood: '舒缓 · 梦境', seconds: 204, url: f('Dreamer.mp3') },
-  { id: 'mc-thought', title: 'Deliberate Thought', mood: '沉思 · 专注', seconds: 177, url: f('Deliberate Thought.mp3') },
-  { id: 'mc-gymno', title: 'Gymnopédie No. 2', mood: '古典 · 钢琴', seconds: 159, url: f('Gymnopedie No 2.mp3') },
-  { id: 'mc-atlantis', title: 'Atlantean Twilight', mood: '神秘 · 深蓝', seconds: 171, url: f('Atlantean Twilight.mp3') },
+/** 分组顺序与后端保持一致，用于首屏骨架与演示模式。 */
+export const GROUPS: TrackGroup[] = [
+  { key: 'pop', label: '华语流行', desc: '耳熟能详的旋律，适合当背景' },
+  { key: 'folk', label: '民谣', desc: '吉他与故事，安静的下午' },
+  { key: 'guofeng', label: '国风', desc: '古筝、琵琶与戏腔' },
+  { key: 'chill', label: '治愈纯音', desc: '钢琴与自然声，写东西时听' },
+  { key: 'rock', label: '摇滚现场', desc: '有点力气，适合深夜' },
+  { key: 'easy', label: '轻快小调', desc: '轻电子与夏日感' },
 ];
 
-export const REMOTE_CREDIT = 'Kevin MacLeod · incompetech.com · CC BY 4.0';
+export const CREDIT = '音源：QQ 音乐试听 · 版权归原权利方，仅供个人非商业试听';
 
-/** 播放地址：演示站没有后端，只能用原始直链；正式部署走同源反代。 */
-export function streamURL(track: RemoteTrack): string {
-  if (DEMO) return encodeURI(track.url);
-  // 用 URLSearchParams 统一编码，空格会被写成 +，服务端 Query() 会还原
-  return `/api/music/stream?${new URLSearchParams({ u: track.url })}`;
+/**
+ * 演示站兜底曲目。
+ *
+ * GitHub Pages 上没有后端，换不到 vkey，所以演示模式用三首 CC BY 4.0 的直链，
+ * 保证「点开就有声音」的体验；正式部署走在线曲库。
+ */
+export const DEMO_TRACKS: Track[] = [
+  {
+    id: 'demo-1',
+    kind: 'online',
+    title: 'Meditation Impromptu 01',
+    artist: 'Kevin MacLeod',
+    album: 'incompetech',
+    group: 'chill',
+    duration: 213,
+    url: encodeURI('https://incompetech.com/music/royalty-free/mp3-royaltyfree/Meditation Impromptu 01.mp3'),
+    source: '演示 · CC BY 4.0',
+  },
+  {
+    id: 'demo-2',
+    kind: 'online',
+    title: 'Dreamer',
+    artist: 'Kevin MacLeod',
+    album: 'incompetech',
+    group: 'chill',
+    duration: 204,
+    url: encodeURI('https://incompetech.com/music/royalty-free/mp3-royaltyfree/Dreamer.mp3'),
+    source: '演示 · CC BY 4.0',
+  },
+  {
+    id: 'demo-3',
+    kind: 'online',
+    title: 'Deliberate Thought',
+    artist: 'Kevin MacLeod',
+    album: 'incompetech',
+    group: 'pop',
+    duration: 177,
+    url: encodeURI('https://incompetech.com/music/royalty-free/mp3-royaltyfree/Deliberate Thought.mp3'),
+    source: '演示 · CC BY 4.0',
+  },
+];
+
+/** 播放地址：演示站直接用 CC 直链，正式部署走同源代理。 */
+export function streamURL(mid: string): string {
+  if (DEMO) return '';
+  return `/api/music/stream?mid=${encodeURIComponent(mid)}`;
 }
 
 /** 秒 → 3:33 */

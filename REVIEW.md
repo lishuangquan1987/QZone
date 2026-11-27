@@ -194,6 +194,9 @@
 | 跟随系统 | `colorScheme: dark/light` 两个上下文 | 分别解析为 `dark` / `light`；清除偏好后自动跟随 |
 | 镜像 | `docker build` + `docker run -v ...:/data` | 首页 200，首次启动自动播种 |
 | CI / Pages / Release | 本地无法执行 | 语法与步骤已对齐官方 action 版本，首次推送后在 Actions 页确认 |
+| 在线华语曲库 | 39 首逐条 `Range` 拉流 | 39/39 返回 200/206，`audio/mp4`，拖动进度正常（`Content-Range` 正确） |
+| 曲库 UI | Playwright 1440 / 390 | 6 个分组筛选正确（国风 7 首）；保存后自动播放，切路由不中断；移动端卡片 320px 无溢出 |
+| 全站回归 | 13 路由 × 明暗 × 3 视口 | 横向溢出 0、控制台报错 0 |
 
 ---
 

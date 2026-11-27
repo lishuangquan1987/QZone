@@ -126,13 +126,21 @@ export interface NotificationView {
 export interface MusicTrack {
   id: string;
   title: string;
-  mood: string;
+  artist?: string;
+  album?: string;
+  mood?: string;
+  group?: string;
   duration: number;
+  cover?: string;
   url: string;
   source: string;
-  kind?: 'builtin' | 'remote';
-  license?: string;
-  credit?: string;
+  kind?: 'builtin' | 'online' | 'remote';
+}
+
+export interface MusicGroup {
+  key: string;
+  label: string;
+  desc: string;
 }
 
 export interface Theme {
@@ -295,7 +303,10 @@ export const api = {
   notifications: () => get<{ notifications: NotificationView[]; unread: number }>('/api/notifications'),
   readNotifications: (ids: number[] = []) => post<{ unread: number }>('/api/notifications/read', { ids }),
 
-  musicLibrary: () => get<{ tracks: MusicTrack[]; note: string }>('/api/music/library'),
+  musicLibrary: () =>
+    get<{ tracks: MusicTrack[]; online: MusicTrack[]; groups: MusicGroup[]; credit: string; note: string }>(
+      '/api/music/library',
+    ),
 
   search: (q: string) =>
     get<{ posts: PostView[]; users: UserView[]; albums: AlbumView[]; keyword: string }>(

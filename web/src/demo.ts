@@ -15,6 +15,7 @@ import type {
   PostView,
   UserView,
 } from './api';
+import { DEMO_TRACKS, GROUPS } from './music-tracks';
 
 const KEY = 'qz.demo.v1';
 const SESSION = 'qz.demo.session';
@@ -1100,8 +1101,14 @@ export async function demoRequest(path: string, init: RequestInit = {}): Promise
 
   /* ---------- 音乐 ---------- */
   if (r[0] === 'music' && r[1] === 'library') {
-    // 演示站没有后端与内置音频文件，只展示前端维护的在线免费曲库
-    return ok({ tracks: [], note: '演示模式没有内置音频；在线免费曲库可直接试听与使用。' });
+    // 演示站没有后端：换不到 QQ 音乐的 vkey，改用三首 CC BY 4.0 直链兜底
+    return ok({
+      tracks: [],
+      online: DEMO_TRACKS,
+      groups: GROUPS,
+      credit: '演示站使用 CC BY 4.0 曲目（Kevin MacLeod）；部署后端后可听华语曲库。',
+      note: '演示模式使用 CC BY 4.0 曲目；部署后端后可用华语曲库。',
+    });
   }
 
   /* ---------- 搜索 ---------- */
