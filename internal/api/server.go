@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,15 +27,19 @@ import (
 
 // Server 承载数据库客户端、上传目录与前端静态资源。
 type Server struct {
-	db         *ent.Client
-	uploads    string
-	webFS      fs.FS
-	web        http.Handler
-	webIndex   []byte
-	maxImage   int64
-	maxAudio   int64
-	trustProxy bool
-	views      *viewCounter
+	db       *ent.Client
+	sqlDB    *sql.DB // statsFor 等手写聚合 SQL 用；ent 只做结构化查询
+	uploads  string
+	webFS    fs.FS
+	web      http.Handler
+	webIndex []byte
+	// precompressed 是启动时对 embed 静态资源预压好的 gzip 产物（key = 请求路径）。
+	// 之前每个请求实时压 156KB 的 JS，qps 只有其它静态资源的 1/6。
+	precompressed map[string][]byte
+	maxImage      int64
+	maxAudio      int64
+	trustProxy    bool
+	views         *viewCounter
 }
 
 // Options 是运行期可调参数。
@@ -48,7 +53,7 @@ type Options struct {
 
 const sessionCookie = "qz_session"
 
-func New(db *ent.Client, uploads string, webFS fs.FS, opt Options) *Server {
+func New(db *ent.Client, sqlDB *sql.DB, uploads string, webFS fs.FS, opt Options) *Server {
 	if opt.MaxImage <= 0 {
 		opt.MaxImage = 30 << 20
 	}
@@ -56,7 +61,7 @@ func New(db *ent.Client, uploads string, webFS fs.FS, opt Options) *Server {
 		opt.MaxAudio = 50 << 20
 	}
 	s := &Server{
-		db: db, uploads: uploads, webFS: webFS,
+		db: db, sqlDB: sqlDB, uploads: uploads, webFS: webFS,
 		maxImage: opt.MaxImage, maxAudio: opt.MaxAudio, trustProxy: opt.TrustProxy,
 		views: newViewCounter(),
 	}
@@ -66,6 +71,7 @@ func New(db *ent.Client, uploads string, webFS fs.FS, opt Options) *Server {
 			s.webIndex = raw
 		}
 		s.web = http.FileServerFS(webFS)
+		s.precompressed = precompressAssets(webFS)
 	}
 	return s
 }
@@ -458,6 +464,15 @@ func (s *Server) spaHandler() http.Handler {
 				// assets 下的文件名带内容哈希，可以放心长缓存；其它静态文件一周
 				if strings.HasPrefix(clean, "/assets/") {
 					w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+					// 启动时已压好的 gzip 产物直接吐，省掉每请求实时压缩
+					if gz, ok := s.precompressed[clean]; ok && acceptsGzip(r) {
+						w.Header().Set("Content-Type", contentTypeOf(clean))
+						w.Header().Set("Content-Encoding", "gzip")
+						w.Header().Set("Content-Length", strconv.Itoa(len(gz)))
+						addVary(w.Header(), "Accept-Encoding")
+						_, _ = w.Write(gz)
+						return
+					}
 				} else {
 					w.Header().Set("Cache-Control", "public, max-age=604800")
 				}

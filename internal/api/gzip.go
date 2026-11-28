@@ -12,11 +12,13 @@ import (
 // 自建部署时 Go 直接吐原始文件，一个 JS 就有 150KB+；Pages 有 CDN 压缩，
 // 这里补上之后首屏传输量能降到三分之一左右。
 // 音频、图片、视频以及带 Range 的请求直接放行，避免破坏分段下载。
+// /assets/ 下已是启动时预压好的产物，这里再包一层只会空转。
 func withCompression(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") ||
 			r.Header.Get("Range") != "" ||
 			strings.HasPrefix(r.URL.Path, "/media/") ||
+			strings.HasPrefix(r.URL.Path, "/assets/") ||
 			strings.HasPrefix(r.URL.Path, "/api/music/stream") {
 			h.ServeHTTP(w, r)
 			return

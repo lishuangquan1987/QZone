@@ -308,6 +308,12 @@ func (s *Server) deleteAlbum(w http.ResponseWriter, r *http.Request, me *ent.Use
 		return
 	}
 	// 先删照片及其点赞，再删相册
+	photoURLs, err := s.db.Photo.Query().Where(photo.HasAlbumWith(album.ID(id))).
+		Select(photo.FieldURL).Strings(ctx)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
 	photoIDs, err := s.db.Photo.Query().Where(photo.HasAlbumWith(album.ID(id))).IDs(ctx)
 	if err != nil {
 		writeErr(w, err)
@@ -327,6 +333,8 @@ func (s *Server) deleteAlbum(w http.ResponseWriter, r *http.Request, me *ent.Use
 		writeErr(w, err)
 		return
 	}
+	// 整册删除：解除文章 / 资料里的引用，全无引用的照片文件一并回收
+	go s.maybeRemoveMedia(context.Background(), me.ID, photoURLs)
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
@@ -419,6 +427,12 @@ func (s *Server) deletePhoto(w http.ResponseWriter, r *http.Request, me *ent.Use
 		fail(w, http.StatusForbidden, "只能删除自己相册里的照片")
 		return
 	}
+	p, err := s.db.Photo.Query().Where(photo.ID(pid), photo.AlbumID(aid)).First(ctx)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	deletedURL := p.URL
 	if _, err := s.db.PhotoLike.Delete().Where(photolike.HasPhotoWith(photo.ID(pid))).Exec(ctx); err != nil {
 		writeErr(w, err)
 		return
@@ -440,6 +454,8 @@ func (s *Server) deletePhoto(w http.ResponseWriter, r *http.Request, me *ent.Use
 	} else if a.Cover != "" {
 		_, _ = upd.SetCover("").Save(ctx)
 	}
+	// 引用清理 + 磁盘回收：文章里还引用着就解除引用，全无引用才删文件
+	go s.maybeRemoveMedia(context.Background(), me.ID, []string{deletedURL})
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 

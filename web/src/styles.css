@@ -1637,3 +1637,6 @@ html[data-appearance='dark'] .pill.cat { background: hsl(var(--cat, 40) 26% 19%)
 }
 #route-bar.on { opacity: 1; transform: scaleX(0.7); }
 #route-bar.done { opacity: 0; transform: scaleX(1); transition: transform 0.22s ease, opacity 0.22s ease; }
+
+/* ---------- 游标分页「加载更多」 ---------- */
+.load-more { display: flex; justify-content: center; padding: 14px 0 4px; }

@@ -25,8 +25,8 @@ export function renderAuth(root: HTMLElement, onSuccess: () => void | Promise<vo
     <section class="auth-panel">
       <div class="auth-card">
         <div class="auth-tabs">
-          <button class="auth-tab active" data-tab="login">登录</button>
-          <button class="auth-tab" data-tab="register">注册</button>
+          <button class="auth-tab active" data-tab="login" aria-pressed="true">登录</button>
+          <button class="auth-tab" data-tab="register" aria-pressed="false">注册</button>
         </div>
 
         <form id="auth-form" class="auth-form">
@@ -66,7 +66,11 @@ export function renderAuth(root: HTMLElement, onSuccess: () => void | Promise<vo
 
   const setAuthTab = (m: 'login' | 'register') => {
     mode = m;
-    tabs.forEach((t) => t.classList.toggle('active', t.dataset.tab === m));
+    tabs.forEach((t) => {
+      const active = t.dataset.tab === m;
+      t.classList.toggle('active', active);
+      t.setAttribute('aria-pressed', String(active));
+    });
     root.querySelectorAll<HTMLElement>('[data-only="register"]').forEach((el) => {
       el.hidden = m !== 'register';
     });

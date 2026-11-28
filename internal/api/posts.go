@@ -7,6 +7,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
+
+	entsql "entgo.io/ent/dialect/sql"
+	predicate "qzone/ent/predicate"
 
 	"qzone/ent"
 	"qzone/ent/comment"
@@ -16,6 +20,24 @@ import (
 )
 
 const defaultCover = ""
+
+// searchPredicate 搜索谓词：≥3 个字符走 FTS5 trigram 索引，更短的词
+// trigram 覆盖不到，回退 LIKE。MATCH 的词按短语语义匹配子串，
+// 内部双引号按 FTS5 规则转义成两个双引号，防注入由参数化 + 转义兜底。
+func searchPredicate(kw string) predicate.Post {
+	if utf8.RuneCountInString(kw) >= 3 {
+		phrase := strings.ReplaceAll(kw, `"`, `""`)
+		return func(s *entsql.Selector) {
+			s.Where(entsql.ExprP(
+				`id IN (SELECT rowid FROM posts_fts WHERE posts_fts MATCH ?)`,
+				`"`+phrase+`"`))
+		}
+	}
+	return post.Or(
+		post.TitleContainsFold(kw),
+		post.ContentContainsFold(kw),
+	)
+}
 
 type postReq struct {
 	Title      string   `json:"title"`
@@ -53,10 +75,7 @@ func (s *Server) listPosts(w http.ResponseWriter, r *http.Request, me *ent.User)
 		query = query.Where(post.VisibilityEQ("public"))
 	}
 	if kw := strings.TrimSpace(q.Get("q")); kw != "" {
-		query = query.Where(post.Or(
-			post.TitleContainsFold(kw),
-			post.ContentContainsFold(kw),
-		))
+		query = query.Where(searchPredicate(kw))
 	}
 	if cat := strings.TrimSpace(q.Get("category")); cat != "" && cat != "全部" {
 		query = query.Where(post.CategoryEQ(cat))
@@ -258,6 +277,13 @@ func (s *Server) deletePost(w http.ResponseWriter, r *http.Request, me *ent.User
 		writeErr(w, err)
 		return
 	}
+	// 文章没了：封面与配图若无其它引用（照片表、其它文章、资料），磁盘一并回收
+	urls := make([]string, 0, len(p.Images)+1)
+	if p.Cover != "" {
+		urls = append(urls, p.Cover)
+	}
+	urls = append(urls, p.Images...)
+	go s.maybeRemoveMedia(context.Background(), me.ID, urls)
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 

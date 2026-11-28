@@ -6,18 +6,6 @@ import { bgm } from './music';
 import { bindThemeToggle, themeToggleHTML } from './theme';
 import { avatarHTML, esc, icon, toast } from './ui';
 import { renderAuth } from './views/auth';
-import { renderHome } from './views/home';
-import { renderPosts } from './views/posts';
-import { renderPost } from './views/post';
-import { renderEditor } from './views/editor';
-import { renderAlbums, renderAlbum } from './views/albums';
-import { renderGuestbook } from './views/guestbook';
-import { renderAbout } from './views/about';
-import { renderSpace } from './views/space';
-import { renderMessages } from './views/messages';
-import { renderVisitors } from './views/visitors';
-import { renderSettings } from './views/settings';
-import { renderSearch } from './views/search';
 import type { ViewRenderer } from './types';
 
 const app = document.getElementById('app')!;
@@ -25,24 +13,26 @@ const app = document.getElementById('app')!;
 interface RouteDef {
   pattern: RegExp;
   nav: string;
-  render: ViewRenderer;
+  // 动态 import：每个视图独立分包，首屏只加载当前路由的代码。
+  // vite 会把这里每个 () => import(...) 切成独立 chunk。
+  load: () => Promise<{ default: ViewRenderer }>;
 }
 
 const ROUTES: RouteDef[] = [
-  { pattern: /^\/home$/, nav: 'home', render: renderHome },
-  { pattern: /^\/posts$/, nav: 'posts', render: renderPosts },
-  { pattern: /^\/post\/(\d+)$/, nav: 'posts', render: renderPost },
-  { pattern: /^\/write$/, nav: '', render: renderEditor },
-  { pattern: /^\/edit\/(\d+)$/, nav: '', render: renderEditor },
-  { pattern: /^\/albums$/, nav: 'albums', render: renderAlbums },
-  { pattern: /^\/album\/(\d+)$/, nav: 'albums', render: renderAlbum },
-  { pattern: /^\/guestbook$/, nav: 'guestbook', render: renderGuestbook },
-  { pattern: /^\/about$/, nav: 'about', render: renderAbout },
-  { pattern: /^\/u\/([^/]+)$/, nav: '', render: renderSpace },
-  { pattern: /^\/messages$/, nav: '', render: renderMessages },
-  { pattern: /^\/visitors$/, nav: '', render: renderVisitors },
-  { pattern: /^\/settings$/, nav: '', render: renderSettings },
-  { pattern: /^\/search$/, nav: '', render: renderSearch },
+  { pattern: /^\/home$/, nav: 'home', load: () => import('./views/home').then((m) => ({ default: m.renderHome })) },
+  { pattern: /^\/posts$/, nav: 'posts', load: () => import('./views/posts').then((m) => ({ default: m.renderPosts })) },
+  { pattern: /^\/post\/(\d+)$/, nav: 'posts', load: () => import('./views/post').then((m) => ({ default: m.renderPost })) },
+  { pattern: /^\/write$/, nav: '', load: () => import('./views/editor').then((m) => ({ default: m.renderEditor })) },
+  { pattern: /^\/edit\/(\d+)$/, nav: '', load: () => import('./views/editor').then((m) => ({ default: m.renderEditor })) },
+  { pattern: /^\/albums$/, nav: 'albums', load: () => import('./views/albums').then((m) => ({ default: m.renderAlbums })) },
+  { pattern: /^\/album\/(\d+)$/, nav: 'albums', load: () => import('./views/albums').then((m) => ({ default: m.renderAlbum })) },
+  { pattern: /^\/guestbook$/, nav: 'guestbook', load: () => import('./views/guestbook').then((m) => ({ default: m.renderGuestbook })) },
+  { pattern: /^\/about$/, nav: 'about', load: () => import('./views/about').then((m) => ({ default: m.renderAbout })) },
+  { pattern: /^\/u\/([^/]+)$/, nav: '', load: () => import('./views/space').then((m) => ({ default: m.renderSpace })) },
+  { pattern: /^\/messages$/, nav: '', load: () => import('./views/messages').then((m) => ({ default: m.renderMessages })) },
+  { pattern: /^\/visitors$/, nav: '', load: () => import('./views/visitors').then((m) => ({ default: m.renderVisitors })) },
+  { pattern: /^\/settings$/, nav: '', load: () => import('./views/settings').then((m) => ({ default: m.renderSettings })) },
+  { pattern: /^\/search$/, nav: '', load: () => import('./views/search').then((m) => ({ default: m.renderSearch })) },
 ];
 
 let shellMounted = false;
@@ -255,7 +245,9 @@ async function renderRoute(): Promise<void> {
 
     window.scrollTo({ top: 0 });
     const ctx = { params, reload: renderRoute };
-    await hit.def.render(view, ctx);
+    const mod = await hit.def.load();
+    if (seq !== routeSeq) return;
+    await mod.default(view, ctx);
     if (seq !== routeSeq) return;
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) return;

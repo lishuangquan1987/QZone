@@ -76,7 +76,7 @@ func main() {
 		log.Fatalf("前端资源异常: %v", err)
 	}
 
-	srv := api.New(client, uploads, sub, api.Options{
+	srv := api.New(client, sqlDB, uploads, sub, api.Options{
 		MaxImage:   int64(*maxImageMB) << 20,
 		MaxAudio:   int64(*maxAudioMB) << 20,
 		TrustProxy: *trustProxy,

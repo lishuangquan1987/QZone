@@ -103,3 +103,16 @@ func normalizePost(req *postReq) error {
 	}
 	return nil
 }
+
+// parseCursor 解析游标分页的 before 参数（RFC3339 时间）。
+// 缺失或格式不对都返回 nil（当作第一页），翻页容错交给前端。
+func parseCursor(raw string) *time.Time {
+	if raw == "" {
+		return nil
+	}
+	t, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return nil
+	}
+	return &t
+}

@@ -23,19 +23,29 @@ type notificationView struct {
 
 func (s *Server) listNotifications(w http.ResponseWriter, r *http.Request, me *ent.User) {
 	ctx := r.Context()
-	rows, err := s.db.Notification.Query().
+	// 游标分页：不传 before 是第一页，之后由 nextBefore 继续；unread 只在第一页统计
+	before := parseCursor(r.URL.Query().Get("before"))
+	nq := s.db.Notification.Query().
 		Where(notification.HasToWith(user.ID(me.ID))).
 		WithFrom().
 		Order(ent.Desc(notification.FieldCreatedAt)).
-		Limit(80).All(ctx)
+		Limit(81)
+	if before != nil {
+		nq = nq.Where(notification.CreatedAtLT(*before))
+	}
+	rows, err := nq.All(ctx)
 	if err != nil {
 		writeErr(w, err)
 		return
 	}
+	hasMore := len(rows) > 80
+	if hasMore {
+		rows = rows[:80]
+	}
 	out := make([]notificationView, 0, len(rows))
 	unread := 0
 	for _, n := range rows {
-		if !n.Read {
+		if !n.Read && before == nil {
 			unread++
 		}
 		out = append(out, notificationView{
@@ -43,7 +53,11 @@ func (s *Server) listNotifications(w http.ResponseWriter, r *http.Request, me *e
 			Read: n.Read, At: timeStr(n.CreatedAt), From: toBrief(n.Edges.From),
 		})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"notifications": out, "unread": unread})
+	resp := map[string]any{"notifications": out, "unread": unread, "hasMore": hasMore}
+	if hasMore && len(rows) > 0 {
+		resp["nextBefore"] = timeStr(rows[len(rows)-1].CreatedAt)
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) readNotifications(w http.ResponseWriter, r *http.Request, me *ent.User) {

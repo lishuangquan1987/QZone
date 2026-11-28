@@ -120,6 +120,9 @@ export function toast(message: string, kind: 'info' | 'ok' | 'err' = 'info'): vo
   const item = document.createElement('div');
   item.className = `toast toast-${kind}`;
   item.textContent = message;
+  // role=status：内容更新时读屏器自动播报，不用抢焦点
+  item.setAttribute('role', 'status');
+  box.setAttribute('aria-live', 'polite');
   box.appendChild(item);
   requestAnimationFrame(() => item.classList.add('in'));
   setTimeout(() => {
@@ -156,7 +159,7 @@ export function modal(opts: ModalOptions): Promise<boolean> {
       </div>`;
     document.body.appendChild(wrap);
     document.body.classList.add('no-scroll');
-    const close = (ok: boolean) => {
+    let close = (ok: boolean) => {
       wrap.remove();
       document.body.classList.remove('no-scroll');
       resolve(ok);
@@ -180,7 +183,37 @@ export function modal(opts: ModalOptions): Promise<boolean> {
       }
     });
     opts.onMount?.(wrap);
+    // 焦点陷阱 + Escape 关闭：Tab 只在弹窗内循环，关闭后归还焦点
+    const previouslyFocused = document.activeElement as HTMLElement | null;
     wrap.querySelector<HTMLElement>('input, textarea')?.focus();
+    const trap = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        close(false);
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const focusables = Array.from(
+        wrap.querySelectorAll<HTMLElement>('button, a[href], input, textarea, select, [tabindex]:not([tabindex="-1"])'),
+      ).filter((el) => !el.hasAttribute('disabled') && el.offsetParent !== null);
+      if (!focusables.length) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    wrap.addEventListener('keydown', trap);
+    const origClose = close;
+    close = (ok: boolean) => {
+      wrap.removeEventListener('keydown', trap);
+      previouslyFocused?.focus();
+      origClose(ok);
+    };
   });
 }
 

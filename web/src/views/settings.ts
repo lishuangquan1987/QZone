@@ -32,7 +32,7 @@ export async function renderSettings(root: HTMLElement, ctx: ViewCtx): Promise<v
       </div>
     </header>
     <nav class="seg">
-      ${TABS.map((t) => `<button class="seg-btn ${t.key === tab ? 'active' : ''}" data-tab="${t.key}">${t.label}</button>`).join('')}
+      ${TABS.map((t) => `<button class="seg-btn ${t.key === tab ? 'active' : ''}" data-tab="${t.key}" aria-pressed="${t.key === tab}">${t.label}</button>`).join('')}
     </nav>
     <div id="settings-body"></div>
   </div>`;

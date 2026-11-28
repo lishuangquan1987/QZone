@@ -14,6 +14,11 @@ import (
 
 	"golang.org/x/image/draw"
 	_ "golang.org/x/image/webp" // 注册 webp 解码器；前端压缩后上传的就是 webp
+
+	// image.Decode 是按注册的解码器分发的：缺了对应格式就解不出来，
+	// buildThumb 会静默失败回退原图。jpg 由 image/jpeg 编码时顺带注册。
+	_ "image/gif"
+	_ "image/png"
 )
 
 // 只允许这几个宽度，避免 ?w= 任意值把磁盘塞满

@@ -58,14 +58,40 @@ export async function renderGuestbook(root: HTMLElement, ctx: ViewCtx): Promise<
       </div>
     </article>`;
 
+  // 游标分页：首页一次 100 条，更早的留言用「加载更多」翻
+  let nextBefore: string | null = null;
+  let loadingMore = false;
+
+  const moreBtn = (): string =>
+    nextBefore
+      ? `<div class="load-more"><button class="btn btn-ghost btn-sm" id="gb-more">加载更早的留言</button></div>`
+      : '';
+
   const load = async () => {
     const r = await api.guestbook(owner);
+    nextBefore = r.hasMore ? (r.nextBefore ?? null) : null;
     list.innerHTML = r.entries.length
-      ? r.entries.map(item).join('')
+      ? r.entries.map(item).join('') + moreBtn()
       : `<div class="card empty"><div class="empty-mark">${icon('mail', 22)}</div>
           <p class="empty-title">还没有留言</p><p class="empty-desc">成为第一个留言的人。</p></div>`;
   };
   await load();
+
+  list.addEventListener('click', async (e) => {
+    if (!(e.target as HTMLElement).closest('#gb-more')) return;
+    if (loadingMore || !nextBefore) return;
+    loadingMore = true;
+    const btn = list.querySelector<HTMLButtonElement>('#gb-more');
+    if (btn) btn.disabled = true;
+    try {
+      const r = await api.guestbook(owner, nextBefore);
+      nextBefore = r.hasMore ? (r.nextBefore ?? null) : null;
+      btn?.parentElement?.remove();
+      list.insertAdjacentHTML('beforeend', r.entries.map(item).join('') + moreBtn());
+    } finally {
+      loadingMore = false;
+    }
+  });
 
   root.querySelector<HTMLFormElement>('#gb-form')!.addEventListener('submit', async (e) => {
     e.preventDefault();

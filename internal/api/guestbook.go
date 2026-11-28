@@ -31,14 +31,25 @@ func (s *Server) listGuestbook(w http.ResponseWriter, r *http.Request, me *ent.U
 		}
 		owner = u
 	}
-	rows, err := s.db.Guestbook.Query().
+	// 游标分页：before 传上一页最后一条的时间，继续向后翻；
+	// 不传就是第一页。hasMore + nextBefore 告诉前端还有没有下一页。
+	before := parseCursor(r.URL.Query().Get("before"))
+	gq := s.db.Guestbook.Query().
 		Where(guestbook.HasOwnerWith(user.ID(owner.ID))).
 		WithAuthor().
 		Order(ent.Desc(guestbook.FieldCreatedAt)).
-		Limit(100).All(ctx)
+		Limit(101)
+	if before != nil {
+		gq = gq.Where(guestbook.CreatedAtLT(*before))
+	}
+	rows, err := gq.All(ctx)
 	if err != nil {
 		writeErr(w, err)
 		return
+	}
+	hasMore := len(rows) > 100
+	if hasMore {
+		rows = rows[:100]
 	}
 	out := make([]guestbookView, 0, len(rows))
 	for _, g := range rows {
@@ -49,7 +60,11 @@ func (s *Server) listGuestbook(w http.ResponseWriter, r *http.Request, me *ent.U
 			CanEdit: g.OwnerID == me.ID,
 		})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"entries": out})
+	resp := map[string]any{"entries": out, "hasMore": hasMore}
+	if hasMore && len(rows) > 0 {
+		resp["nextBefore"] = timeStr(rows[len(rows)-1].CreatedAt)
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) createGuestbook(w http.ResponseWriter, r *http.Request, me *ent.User) {

@@ -266,10 +266,14 @@ export const api = {
   user: (uin: string) => get<{ user: UserView }>(`/api/users/${encodeURIComponent(uin)}`),
   updateProfile: (body: Record<string, unknown>) => patch<UserView>('/api/users/me', body),
   signIn: () => post<{ already: boolean; streak: number; sunValue: number }>('/api/users/me/signin'),
-  visitors: (uin: string, mode: 'in' | 'out' = 'in') =>
-    get<{ visitors: { author: Brief; module: string; at: string }[]; total: number; today: number }>(
-      `/api/users/${encodeURIComponent(uin)}/visitors?mode=${mode}`,
-    ),
+  visitors: (uin: string, mode: 'in' | 'out' = 'in', before?: string) =>
+    get<{
+      visitors: { author: Brief; module: string; at: string }[];
+      total: number;
+      today: number;
+      hasMore?: boolean;
+      nextBefore?: string;
+    }>(`/api/users/${encodeURIComponent(uin)}/visitors?mode=${mode}${before ? `&before=${encodeURIComponent(before)}` : ''}`),
   visit: (uin: string, module: string) =>
     post<{ ok: boolean }>(`/api/users/${encodeURIComponent(uin)}/visit`, { module }),
 
@@ -302,14 +306,19 @@ export const api = {
   deletePhoto: (aid: number, pid: number) => del<{ ok: boolean }>(`/api/albums/${aid}/photos/${pid}`),
   likePhoto: (id: number) => post<{ liked: boolean; count: number }>(`/api/photos/${id}/like`),
 
-  guestbook: (uin?: string) =>
-    get<{ entries: GuestbookView[] }>(`/api/guestbook${uin ? `?uin=${encodeURIComponent(uin)}` : ''}`),
+  guestbook: (uin?: string, before?: string) =>
+    get<{ entries: GuestbookView[]; hasMore?: boolean; nextBefore?: string }>(
+      `/api/guestbook${uin ? `?uin=${encodeURIComponent(uin)}` : ''}${before ? `${uin ? '&' : '?'}before=${encodeURIComponent(before)}` : ''}`,
+    ),
   createGuestbook: (owner: string, content: string) =>
     post<GuestbookView>('/api/guestbook', { owner, content }),
   deleteGuestbook: (id: number) => del<{ ok: boolean }>(`/api/guestbook/${id}`),
   replyGuestbook: (id: number, reply: string) => post<{ ok: boolean }>(`/api/guestbook/${id}/reply`, { reply }),
 
-  notifications: () => get<{ notifications: NotificationView[]; unread: number }>('/api/notifications'),
+  notifications: (before?: string) =>
+    get<{ notifications: NotificationView[]; unread: number; hasMore?: boolean; nextBefore?: string }>(
+      `/api/notifications${before ? `?before=${encodeURIComponent(before)}` : ''}`,
+    ),
   readNotifications: (ids: number[] = []) => post<{ unread: number }>('/api/notifications/read', { ids }),
 
   musicLibrary: () =>
