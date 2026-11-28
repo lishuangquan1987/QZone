@@ -743,32 +743,57 @@ export async function renderEditor(root: HTMLElement, ctx: ViewCtx): Promise<voi
   const busy = new Set<string>();
 
   const uploadAndInsert = async (files: File[], alt = '图片') => {
-    for (const f of files) {
-      if (!f.type.startsWith('image/')) {
-        toast('只能插入图片文件', 'err');
-        continue;
-      }
-      const key = `${f.name}-${f.size}`;
-      if (busy.has(key)) continue;
-      busy.add(key);
-      try {
-        toast(`正在处理 ${f.name || alt}…`);
-        const prepared = await prepareImage(f);
-        if (prepared.size > IMAGE_LIMIT_MB * 1024 * 1024) {
-          throw new Error(`压缩后仍有 ${mb(prepared.size)}，超过上限`);
+    const list = files.filter((f) => {
+      if (f.type.startsWith('image/')) return true;
+      toast('只能插入图片文件', 'err');
+      return false;
+    });
+    if (!list.length) return;
+
+    // 3 路并发压缩上传，但按原顺序插入，行文顺序不会被并发打乱
+    type Done = { url: string; name: string; note: string | null };
+    const done: (Done | null)[] = new Array(list.length).fill(null);
+    let cursor = 0;
+
+    const worker = async () => {
+      while (cursor < list.length) {
+        const i = cursor++;
+        const f = list[i];
+        const key = `${f.name}-${f.size}`;
+        if (busy.has(key)) continue;
+        busy.add(key);
+        try {
+          const prepared = await prepareImage(f);
+          if (prepared.size > IMAGE_LIMIT_MB * 1024 * 1024) {
+            throw new Error(`压缩后仍有 ${mb(prepared.size)}，超过上限`);
+          }
+          const { url } = await api.upload(prepared.file);
+          done[i] = {
+            url,
+            name: (f.name || alt).replace(/\.[^.]+$/, '') || alt,
+            note: prepared.compressed ? `已压缩 ${mb(prepared.originalSize)} → ${mb(prepared.size)}` : null,
+          };
+        } catch (err) {
+          toast((err as Error).message, 'err');
+        } finally {
+          busy.delete(key);
         }
-        const { url } = await api.upload(prepared.file);
-        images.push(url);
-        const name = (f.name || alt).replace(/\.[^.]+$/, '') || alt;
-        insert(`\n![${name}](${url})\n`);
-        thumbs.innerHTML = images.map((u) => `<img src="${esc(u)}" alt="">`).join('');
-        toast(prepared.compressed ? `已压缩 ${mb(prepared.originalSize)} → ${mb(prepared.size)}` : '图片已插入', 'ok');
-      } catch (err) {
-        toast((err as Error).message, 'err');
-      } finally {
-        busy.delete(key);
       }
+    };
+
+    toast(list.length > 1 ? `正在处理 ${list.length} 张…` : `正在处理 ${list[0].name || alt}…`);
+    await Promise.all([worker(), worker(), worker()]);
+
+    let compressed = 0;
+    for (const d of done) {
+      if (!d) continue;
+      images.push(d.url);
+      insert(`\n![${d.name}](${d.url})\n`);
+      if (d.note) compressed++;
     }
+    thumbs.innerHTML = images.map((u) => `<img src="${esc(u)}" alt="">`).join('');
+    const ok = done.filter(Boolean).length;
+    if (ok) toast(compressed ? `${ok} 张已插入，其中 ${compressed} 张经过压缩` : `${ok} 张图片已插入`, 'ok');
   };
 
   content.addEventListener('paste', (e) => {

@@ -6,6 +6,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
+	"entgo.io/ent/schema/index"
 )
 
 type Photo struct{ ent.Schema }
@@ -19,6 +20,14 @@ func (Photo) Fields() []ent.Field {
 		field.Int("height").Default(0),
 		field.Int64("size").Default(0),
 		field.Time("created_at").Default(time.Now),
+	}
+}
+
+func (Photo) Indexes() []ent.Index {
+	return []ent.Index{
+		index.Fields("album_id"),
+		// /media/ 的每次请求都要按 url 反查所在相册
+		index.Fields("url"),
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
+	"entgo.io/ent/schema/index"
 )
 
 type Notification struct{ ent.Schema }
@@ -19,6 +20,13 @@ func (Notification) Fields() []ent.Field {
 		field.String("target").Default(""),
 		field.Bool("read").Default(false),
 		field.Time("created_at").Default(time.Now),
+	}
+}
+
+func (Notification) Indexes() []ent.Index {
+	return []ent.Index{
+		index.Fields("to_id", "read"),
+		index.Fields("created_at"),
 	}
 }
 

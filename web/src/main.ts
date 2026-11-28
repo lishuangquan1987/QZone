@@ -92,11 +92,11 @@ function matchRoute(path: string) {
 
 async function boot(): Promise<boolean> {
   try {
+    // session 已经带回 user / unread / themes，不必再发一次 bootstrap
     const s = await api.session();
     if (!s.authenticated || !s.user) return false;
-    const b = await api.bootstrap();
-    setBoot({ me: b.me, themes: b.themes, unread: b.unread });
-    applyTheme(b.me.theme);
+    setBoot({ me: s.user, themes: s.themes ?? [], unread: s.unread ?? 0 });
+    applyTheme(s.user.theme);
     return true;
   } catch {
     return false;
@@ -215,10 +215,15 @@ function mountShell(): void {
   void renderRoute();
 }
 
+// 快速连点导航时，先发起的渲染可能后完成。用序号丢弃过期结果，
+// 否则旧页面会把新页面覆盖掉。
+let routeSeq = 0;
+
 async function renderRoute(): Promise<void> {
   if (!shellMounted) return;
   const view = document.getElementById('view');
   if (!view) return;
+  const seq = ++routeSeq;
   const { path, query } = parseHash();
   const hit = matchRoute(path);
   // 写作页会给 body 加 writer-mode（锁滚动），换路由时先复位
@@ -251,6 +256,7 @@ async function renderRoute(): Promise<void> {
     window.scrollTo({ top: 0 });
     const ctx = { params, reload: renderRoute };
     await hit.def.render(view, ctx);
+    if (seq !== routeSeq) return;
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) return;
     view.innerHTML = `<div class="page narrow"><div class="card empty">

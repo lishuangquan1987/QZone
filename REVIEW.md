@@ -65,6 +65,38 @@
 | Markdown 链接可执行 `javascript:` | `renderMarkdown()` 加了基于 `<template>` 的协议过滤，只保留 http(s)/mailto/站内路径 |
 | 启动日志地址拼接错误 | `http://localhost%s` 与 `127.0.0.1:8123` 拼成 `localhost127.0.0.1`，按 `:port` / `0.0.0.0:port` 归一化 |
 
+
+### 第四轮：数据层与安全收口
+
+这一轮不做新功能，只把「量一上来就露馅」的地方补掉。实测库：5000 篇文章 / 20018 张照片 / 45 个相册。
+
+| 问题 | 处理 | 实测 |
+| --- | --- | --- |
+| 外键与高频过滤条件全无索引 | 在 `ent/schema/*.go` 声明 12 个索引（`photos(url)`、`photos(album_id)`、`posts(author_id,visibility,created_at)`、`comments(post_id)`、`albums(owner_id)`、`notifications(to_id,read)`、`visits(host_id)`、`visits(visitor_id)`、`visits(host_id,visitor_id,created_at)`、`sessions(expires_at)`、`guestbooks(owner_id)`、`posts(visibility)`） | `/api/albums` 单次 **54ms → 3.6ms**；并发 10 的 p95 **603ms → 37ms** |
+| 坑：手工 `CREATE INDEX` 会被启动迁移删掉 | `Schema.Create(WithDropIndex(true))` 会清理 schema 里没有的索引，实测重启后 14 个自定义索引归零 | 必须写进 schema，不能只对线上库执行 SQL |
+| 相册列表 N+1：每个相册查一次 owner + 一次 count | `WithOwner()` 一次带出 + `GROUP BY album_id` 一次聚合 | 45 个相册从 90 次查询降到 3 次 |
+| 文章列表把所有评论正文查出来，只为数条数 | 列表页只做 `COUNT` 聚合；详情页才取明细，且限 200 条 | 列表响应从 O(评论数) 降到 O(文章数) |
+| 点赞返回全量用户数组 | 只带前 24 个头像 + `likeCount`（前端本来也只显示 8 个昵称） | 大V 文章响应体不再随点赞数膨胀 |
+| `X-Forwarded-For` 无条件信任，限速可绕过 | 新增 `-trust-proxy`，默认不采信；开启时取 XFF **最后一段**（反代追加的真实来源） | 伪造 XFF 连试仍被 429 |
+| 注册无频率限制（bcrypt 可被当 CPU 放大器） | 单 IP 每小时 10 次 | 第 11 次 429 |
+| 登录只按「IP + 空间号」限速，换号即可放大 | 增加单 IP 30 次 / 5 分钟的兜底维度 | — |
+| 限速表满了会整体清空，攻击者灌 key 即可自清 | 改为先按过期逐条淘汰，清不掉才重置 | — |
+| PATCH 文章绕过字数与配图上限 | `create` / `update` 共用 `normalizePost()` | 10 张图 PATCH 返回 400 |
+| 头像 / 封面 / 背景音乐 / 配图可填任意地址 | 只放行 `/media/` 与 `https://`；访客浏览器不再被引去请求第三方 | `data:`、`javascript:`、`http://` 均 400 |
+| 时区日界按 UTC 算 | 新增 `appLoc`（跟随 `TZ`）与 `startOfDay()`；签到、今日访客、消息时间统一 | 东八区 0–8 点不再算错日期 |
+| 上传只信扩展名与声明类型 | 读前 512 字节做内容嗅探（`media.ContentMatches`），SVG 额外要求出现 `<svg` | 内容是 HTML 的 `a.png` 返回 400 |
+| `/media/` 对「不在相册里」的地址一律放行 | 头像/封面/BGM 放行，其余上传图只有本人可见 | 他人访问未入库图 403、本人 200 |
+| 访客记录每次进页面都写一条，刷新即刷屏 | 同 host+visitor 30 分钟内只记一次 | 连续 3 次访问只新增 1 条 |
+| 浏览量每个 GET 都写库（单写者下会堵读） | 内存计数 + 20 秒批量 `AddViews` + 同 IP 30 分钟去重 | 详情页不再产生写事务 |
+| 相册直出原图 | `?w=480` 服务端缩放（CatmullRom → JPEG 82），落盘 `.thumb/<宽>/`，白名单 4 档 | 1.85MB → 69KB；二次请求 0.8ms |
+| 缺少运维能力 | `/healthz`、访问日志（API 全记、静态只记错误与慢请求）、`SIGTERM` 优雅关闭、`-backup-to` 热备份 | 备份 `PRAGMA integrity_check` 通过 |
+| `go test ./...` 一直是空跑 | 新增 `valid_test.go` / `ratelimit_test.go` / `sniff_test.go`，覆盖可见性矩阵、字段校验、限速窗口、XFF、时区、内容嗅探 | `go test ./...` 真实执行 |
+| 静态资源缺失被 SPA 回退成 200 HTML | `/assets/*` 找不到直接 404 | 避免浏览器把 HTML 当 JS 解析 |
+| 静态文件被整块读进内存再写回 | 改为 `fs.Stat` 判断后直接交给 `FileServer`（可 sendfile） | 去掉每个请求一次全量拷贝 |
+| 首屏 `session` + `bootstrap` 两次串行请求 | `session` 直接带回 themes，去掉 `bootstrap` 调用 | 省一个 RTT |
+| 快速切换路由时旧视图覆盖新视图 | 路由序号，过期结果直接丢弃 | — |
+
+
 ### 第三轮：性能与曲库
 
 | 问题 | 处理 |
@@ -200,6 +232,10 @@
 
 ---
 
-## 七、如果只做一件事
+## 七、下一件事
 
-把 **`/media/` 的权限**补上。现在「私密相册」的安全性，取决于别人猜不到 `a-campus.svg` 这种文件名——而示例素材的文件名是固定且可枚举的。改法不复杂：给媒体 URL 加 `?sig=<hmac>&exp=<ts>`，或让 `/media/<uin>/...` 走一次会话校验。
+P0/P1 已收口。接下来收益最大的是 **上传文件的引用计数**：
+
+删除文章 / 相册时只删数据库记录，磁盘原图会一直留着；但直接删文件又会误删被多篇文章共用的图。建议加一张 `media(url, owner_id, ref_type, ref_id)` 表，上传时登记、引用时插一行、删除时按 `url` 判断还有没有其他引用，没有才 `os.Remove`。顺带能做出「空间占用统计」和「孤立文件清理」。
+
+其次才是搜索：文章量到几万时 `LIKE %kw%` 会明显变慢，SQLite FTS5 可以解决，但要引入影子表与同步逻辑，等内容量真的上来再做。

@@ -1,7 +1,7 @@
 import { api, type AlbumView } from '../api';
 import { mb, prepareImage } from '../image';
 import { albumCardHTML } from '../components';
-import { bindLightbox, confirmDialog, esc, icon, modal, timeAgo, toast } from '../ui';
+import { bindLightbox, confirmDialog, esc, icon, modal, thumb, timeAgo, toast } from '../ui';
 import type { ViewCtx } from '../types';
 
 /** 相册列表。 */
@@ -107,7 +107,7 @@ export async function renderAlbum(root: HTMLElement, ctx: ViewCtx): Promise<void
             ? album.photos
                 .map(
                   (p) => `<figure class="photo" data-pid="${p.id}">
-                    <img src="${esc(p.url)}" alt="${esc(p.caption)}" loading="lazy" decoding="async" width="${p.width || 800}" height="${p.height || 600}" data-zoom="${esc(p.url)}">
+                    <img src="${esc(thumb(p.url, 480))}" alt="${esc(p.caption)}" loading="lazy" decoding="async" width="${p.width || 800}" height="${p.height || 600}" data-zoom="${esc(p.url)}">
                     <figcaption>
                       <span>${esc(p.caption || timeAgo(p.at))}</span>
                       <span class="photo-like">${icon('heart', 12)} ${p.likeCount}</span>
@@ -175,19 +175,37 @@ export async function renderAlbum(root: HTMLElement, ctx: ViewCtx): Promise<void
       if (!files.length) return;
       toast(`正在处理 ${files.length} 张…`);
       try {
+        // 3 路并发：一张图压缩 + 上传要一两秒，串行 10 张就得等十几秒
+        type Done = { url: string; size: number; w: number; h: number; saved: number };
+        const done: (Done | null)[] = new Array(files.length).fill(null);
+        let cursor = 0;
+        const worker = async () => {
+          while (cursor < files.length) {
+            const i = cursor++;
+            const prepared = await prepareImage(files[i]);
+            const { url } = await api.upload(prepared.file);
+            done[i] = {
+              url,
+              size: prepared.size,
+              w: prepared.width,
+              h: prepared.height,
+              saved: prepared.originalSize - prepared.size,
+            };
+          }
+        };
+        await Promise.all([worker(), worker(), worker()]);
         const urls: string[] = [];
         const sizes: number[] = [];
         const widths: number[] = [];
         const heights: number[] = [];
         let savedBytes = 0;
-        for (const f of files) {
-          const prepared = await prepareImage(f);
-          const { url } = await api.upload(prepared.file);
-          urls.push(url);
-          sizes.push(prepared.size);
-          widths.push(prepared.width);
-          heights.push(prepared.height);
-          savedBytes += prepared.originalSize - prepared.size;
+        for (const d of done) {
+          if (!d) continue;
+          urls.push(d.url);
+          sizes.push(d.size);
+          widths.push(d.w);
+          heights.push(d.h);
+          savedBytes += d.saved;
         }
         album = await api.addPhotos(album.id, urls, { sizes, widths, heights });
         toast(savedBytes > 512 * 1024 ? `上传完成，压缩节省 ${mb(savedBytes)}` : '上传完成', 'ok');

@@ -28,5 +28,11 @@ func (Visit) Edges() []ent.Edge {
 }
 
 func (Visit) Indexes() []ent.Index {
-	return []ent.Index{index.Fields("created_at")}
+	return []ent.Index{
+		index.Fields("created_at"),
+		index.Fields("host_id"),
+		index.Fields("visitor_id"),
+		// 访客去重要按「主人 + 访客 + 时间」查最近一条
+		index.Fields("host_id", "visitor_id", "created_at"),
+	}
 }

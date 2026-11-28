@@ -20,14 +20,14 @@ import (
 // Open 打开（必要时创建）SQLite 数据库，返回 ent 客户端。
 //
 // 使用 modernc.org/sqlite：纯 Go 实现，可静态编译、跨平台交叉编译不需要 CGO。
-func Open(path string) (*ent.Client, error) {
+func Open(path string) (*ent.Client, *sql.DB, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(8000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)", filepath.ToSlash(path))
 	drv, err := sql.Open("sqlite", dsn)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	drv.SetMaxOpenConns(1) // SQLite 单写者，串行化避免 SQLITE_BUSY
 	drv.SetMaxIdleConns(1)
@@ -38,9 +38,20 @@ func Open(path string) (*ent.Client, error) {
 		schema.WithDropIndex(true),
 	); err != nil {
 		client.Close()
-		return nil, err
+		return nil, nil, err
 	}
-	return client, nil
+	return client, drv, nil
+}
+
+// Backup 用 VACUUM INTO 生成一份一致的快照。
+// 直接 cp 一个正在写入的 SQLite 文件（还有 -wal）可能拿到半截数据。
+func Backup(ctx context.Context, d *sql.DB, dst string) error {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	_ = os.Remove(dst) // VACUUM INTO 要求目标文件不存在
+	_, err := d.ExecContext(ctx, "VACUUM INTO ?", filepath.ToSlash(dst))
+	return err
 }
 
 // Empty 判断库中是否还没有任何账号。

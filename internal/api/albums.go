@@ -43,19 +43,59 @@ type albumView struct {
 
 func (s *Server) albumViews(ctx context.Context, rows []*ent.Album, viewerID int, withPhotos bool) ([]albumView, error) {
 	out := make([]albumView, 0, len(rows))
+	if len(rows) == 0 {
+		return out, nil
+	}
+	ids := make([]int, 0, len(rows))
 	for _, a := range rows {
-		av := albumView{
-			ID: a.ID, Name: a.Name, Description: a.Description, Cover: a.Cover,
-			Privacy: a.Privacy, At: timeStr(a.CreatedAt), CanEdit: a.OwnerID == viewerID,
+		ids = append(ids, a.ID)
+	}
+
+	// 照片数一次聚合：之前是每个相册查一次 count，列表 40 个相册就是 40 次
+	counts := make(map[int]int, len(ids))
+	var agg []struct {
+		AlbumID int `json:"album_id"`
+		Count   int `json:"count"`
+	}
+	if err := s.db.Photo.Query().
+		Where(photo.HasAlbumWith(album.IDIn(ids...))).
+		GroupBy(photo.FieldAlbumID).
+		Aggregate(ent.Count()).
+		Scan(ctx, &agg); err != nil {
+		return nil, err
+	}
+	for _, r := range agg {
+		counts[r.AlbumID] = r.Count
+	}
+
+	// 正常调用方都带 WithOwner；缺的（比如刚 Create 完）一次性补齐
+	var missing []int
+	for _, a := range rows {
+		if a.Edges.Owner == nil {
+			missing = append(missing, a.OwnerID)
 		}
-		if u, err := s.db.User.Query().Where(user.ID(a.OwnerID)).Only(ctx); err == nil {
-			av.Owner = toBrief(u)
-		}
-		cnt, err := s.db.Photo.Query().Where(photo.HasAlbumWith(album.ID(a.ID))).Count(ctx)
+	}
+	owners := make(map[int]*ent.User, len(missing))
+	if len(missing) > 0 {
+		us, err := s.db.User.Query().Where(user.IDIn(missing...)).All(ctx)
 		if err != nil {
 			return nil, err
 		}
-		av.Count = cnt
+		for _, u := range us {
+			owners[u.ID] = u
+		}
+	}
+
+	for _, a := range rows {
+		owner := a.Edges.Owner
+		if owner == nil {
+			owner = owners[a.OwnerID]
+		}
+		av := albumView{
+			ID: a.ID, Name: a.Name, Description: a.Description, Cover: a.Cover,
+			Privacy: a.Privacy, At: timeStr(a.CreatedAt), CanEdit: a.OwnerID == viewerID,
+			Count: counts[a.ID], Owner: toBrief(owner),
+		}
 
 		if withPhotos {
 			photos, err := s.db.Photo.Query().
@@ -64,14 +104,14 @@ func (s *Server) albumViews(ctx context.Context, rows []*ent.Album, viewerID int
 			if err != nil {
 				return nil, err
 			}
-			ids := make([]int, 0, len(photos))
+			pids := make([]int, 0, len(photos))
 			for _, p := range photos {
-				ids = append(ids, p.ID)
+				pids = append(pids, p.ID)
 			}
 			likes := []*ent.PhotoLike{}
-			if len(ids) > 0 {
+			if len(pids) > 0 {
 				likes, err = s.db.PhotoLike.Query().
-					Where(photolike.HasPhotoWith(photo.IDIn(ids...))).
+					Where(photolike.HasPhotoWith(photo.IDIn(pids...))).
 					WithUser().WithPhoto().All(ctx)
 				if err != nil {
 					return nil, err
@@ -122,7 +162,7 @@ func (s *Server) listAlbums(w http.ResponseWriter, r *http.Request, me *ent.User
 		// 与文章一致：不公开列出的相册只能通过链接访问，不进别人的列表
 		q = q.Where(album.PrivacyEQ("public"))
 	}
-	rows, err := q.Order(ent.Desc(album.FieldCreatedAt)).All(ctx)
+	rows, err := q.WithOwner().Order(ent.Desc(album.FieldCreatedAt)).All(ctx)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -176,7 +216,7 @@ func (s *Server) getAlbum(w http.ResponseWriter, r *http.Request, me *ent.User) 
 		fail(w, http.StatusBadRequest, "无效的相册编号")
 		return
 	}
-	a, err := s.db.Album.Query().Where(album.ID(id)).Only(ctx)
+	a, err := s.db.Album.Query().Where(album.ID(id)).WithOwner().Only(ctx)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -200,7 +240,7 @@ func (s *Server) updateAlbum(w http.ResponseWriter, r *http.Request, me *ent.Use
 		fail(w, http.StatusBadRequest, "无效的相册编号")
 		return
 	}
-	a, err := s.db.Album.Query().Where(album.ID(id)).Only(ctx)
+	a, err := s.db.Album.Query().Where(album.ID(id)).WithOwner().Only(ctx)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -258,7 +298,7 @@ func (s *Server) deleteAlbum(w http.ResponseWriter, r *http.Request, me *ent.Use
 		fail(w, http.StatusBadRequest, "无效的相册编号")
 		return
 	}
-	a, err := s.db.Album.Query().Where(album.ID(id)).Only(ctx)
+	a, err := s.db.Album.Query().Where(album.ID(id)).WithOwner().Only(ctx)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -312,7 +352,11 @@ func (s *Server) addPhotos(w http.ResponseWriter, r *http.Request, me *ent.User)
 		fail(w, http.StatusBadRequest, "请先选择图片")
 		return
 	}
-	a, err := s.db.Album.Query().Where(album.ID(id)).Only(ctx)
+	if len(req.URLs) > 30 {
+		fail(w, http.StatusBadRequest, "一次最多添加 30 张")
+		return
+	}
+	a, err := s.db.Album.Query().Where(album.ID(id)).WithOwner().Only(ctx)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -322,6 +366,12 @@ func (s *Server) addPhotos(w http.ResponseWriter, r *http.Request, me *ent.User)
 		return
 	}
 	for i, u := range req.URLs {
+		clean, ok := safeAssetURL(u, false)
+		if !ok {
+			fail(w, http.StatusBadRequest, "照片地址不合法")
+			return
+		}
+		u = clean
 		b := s.db.Photo.Create().SetAlbum(a).SetURL(u).SetCaption(clip(req.Caption, 60))
 		if i < len(req.Widths) {
 			b.SetWidth(req.Widths[i])

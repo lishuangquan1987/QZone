@@ -219,7 +219,15 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new ApiError(401, '登录状态已失效');
   }
   const raw = await res.text();
-  const data = raw ? JSON.parse(raw) : {};
+  let data: unknown = {};
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      // 反代挂了返回 502 的 HTML 页时，别把 SyntaxError 抛给用户
+      throw new ApiError(res.status || 502, res.ok ? '服务器响应格式异常' : `服务暂时不可用（${res.status}）`);
+    }
+  }
   if (!res.ok) throw new ApiError(res.status, (data as { error?: string }).error || '请求失败');
   remember(data);
   return data as T;
@@ -251,7 +259,8 @@ export const api = {
     clearApiCache();
     return post<{ ok: boolean }>('/api/auth/logout');
   },
-  session: () => get<{ authenticated: boolean; user?: UserView; unread?: number }>('/api/auth/session'),
+  session: () =>
+    get<{ authenticated: boolean; user?: UserView; unread?: number; themes?: Theme[] }>('/api/auth/session'),
 
   bootstrap: () => get<{ me: UserView; unread: number; themes: Theme[] }>('/api/bootstrap'),
   user: (uin: string) => get<{ user: UserView }>(`/api/users/${encodeURIComponent(uin)}`),

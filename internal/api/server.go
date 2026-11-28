@@ -7,10 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log"
 	"net/http"
 	"os"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -24,19 +26,24 @@ import (
 
 // Server 承载数据库客户端、上传目录与前端静态资源。
 type Server struct {
-	db       *ent.Client
-	uploads  string
-	webFS    fs.FS
-	web      http.Handler
-	webIndex []byte
-	maxImage int64
-	maxAudio int64
+	db         *ent.Client
+	uploads    string
+	webFS      fs.FS
+	web        http.Handler
+	webIndex   []byte
+	maxImage   int64
+	maxAudio   int64
+	trustProxy bool
+	views      *viewCounter
 }
 
 // Options 是运行期可调参数。
 type Options struct {
 	MaxImage int64 // 单张图片上限（字节）
 	MaxAudio int64 // 单段音频上限（字节）
+	// TrustProxy 表示前面有可信反代（Nginx / Caddy / 云负载均衡）。
+	// 只有打开时才会采信 X-Forwarded-For，否则一律用 TCP 来源地址。
+	TrustProxy bool
 }
 
 const sessionCookie = "qz_session"
@@ -48,7 +55,12 @@ func New(db *ent.Client, uploads string, webFS fs.FS, opt Options) *Server {
 	if opt.MaxAudio <= 0 {
 		opt.MaxAudio = 50 << 20
 	}
-	s := &Server{db: db, uploads: uploads, webFS: webFS, maxImage: opt.MaxImage, maxAudio: opt.MaxAudio}
+	s := &Server{
+		db: db, uploads: uploads, webFS: webFS,
+		maxImage: opt.MaxImage, maxAudio: opt.MaxAudio, trustProxy: opt.TrustProxy,
+		views: newViewCounter(),
+	}
+	s.startViewFlusher()
 	if webFS != nil {
 		if raw, err := fs.ReadFile(webFS, "index.html"); err == nil {
 			s.webIndex = raw
@@ -105,9 +117,57 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/upload", s.auth(s.uploadImage))
 	mux.HandleFunc("POST /api/upload/audio", s.auth(s.uploadAudio))
 
+	mux.HandleFunc("GET /healthz", s.healthz)
+
 	mux.Handle("/media/", http.StripPrefix("/media/", s.mediaHandler()))
 	mux.Handle("/", s.spaHandler())
-	return securityHeaders(withCompression(mux))
+	return securityHeaders(withCompression(withAccessLog(mux)))
+}
+
+// healthz 给容器探活用：能读库就算健康。
+func (s *Server) healthz(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+	if _, err := s.db.User.Query().Limit(1).Exist(ctx); err != nil {
+		fail(w, http.StatusServiceUnavailable, "数据库不可用")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// accessLog 记录接口调用与慢请求；静态资源只在出错时记，避免刷屏。
+func withAccessLog(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rec := &logWriter{ResponseWriter: w, status: http.StatusOK}
+		h.ServeHTTP(rec, r)
+		if rec.status == http.StatusNotModified {
+			return
+		}
+		cost := time.Since(start)
+		isAPI := strings.HasPrefix(r.URL.Path, "/api/")
+		if !isAPI && rec.status < 400 && cost < 500*time.Millisecond {
+			return
+		}
+		log.Printf("%s %s %d %s", r.Method, r.URL.Path, rec.status, cost.Round(time.Millisecond))
+	})
+}
+
+// logWriter 只用于取状态码，Flush 要透传（将来加 SSE 时不用再改）。
+type logWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *logWriter) WriteHeader(c int) {
+	w.status = c
+	w.ResponseWriter.WriteHeader(c)
+}
+
+func (w *logWriter) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
 }
 
 // securityHeaders 补几个成本极低、收益明确的响应头。
@@ -322,10 +382,19 @@ func (s *Server) mediaHandler() http.Handler {
 			fail(w, http.StatusUnauthorized, "请先登录")
 			return
 		}
-		url := "/media/" + strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
+		rel := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
+		url := "/media/" + rel
 		if !s.mediaVisible(r.Context(), url, me.ID) {
 			fail(w, http.StatusForbidden, "没有权限查看这张图片")
 			return
+		}
+		// ?w=480 走缩略图：相册一屏 20 张原图就是几十 MB
+		if raw := r.URL.Query().Get("w"); raw != "" {
+			if width, err := strconv.Atoi(raw); err == nil && thumbWidths[width] {
+				if s.serveThumb(w, r, strings.TrimPrefix(rel, "/"), width) {
+					return
+				}
+			}
 		}
 		// 同一个地址对不同用户可能结果不同，只能私有缓存
 		w.Header().Set("Cache-Control", "private, max-age=604800")
@@ -342,16 +411,36 @@ func (s *Server) mediaHandler() http.Handler {
 // 头像、封面等其它素材维持原样。
 func (s *Server) mediaVisible(ctx context.Context, url string, viewer int) bool {
 	p, err := s.db.Photo.Query().Where(photo.URLEQ(url)).WithAlbum().First(ctx)
-	if err != nil {
-		if ent.IsNotFound(err) {
+	if err == nil {
+		if p.Edges.Album == nil {
 			return true
 		}
+		return visible(p.Edges.Album.Privacy, p.Edges.Album.OwnerID, viewer)
+	}
+	if !ent.IsNotFound(err) {
 		return false
 	}
-	if p.Edges.Album == nil {
+
+	// 不在相册里的文件：头像、封面、背景音乐本来就是公开素材
+	_, err = s.db.User.Query().Where(user.Or(
+		user.AvatarEQ(url),
+		user.CoverEQ(url),
+		user.BgmURLEQ(url),
+	)).Only(ctx)
+	if err == nil {
 		return true
 	}
-	return visible(p.Edges.Album.Privacy, p.Edges.Album.OwnerID, viewer)
+	if !ent.IsNotFound(err) {
+		return false
+	}
+
+	// 其余（上传了但还没加进相册的图）只给本人看，避免「拿到链接就能看」
+	uin, ok := uploadOwner(url)
+	if !ok {
+		return false
+	}
+	owner, err := s.db.User.Query().Where(user.Uin(uin)).Only(ctx)
+	return err == nil && owner.ID == viewer
 }
 
 func (s *Server) spaHandler() http.Handler {
@@ -362,22 +451,22 @@ func (s *Server) spaHandler() http.Handler {
 		}
 		clean := path.Clean(r.URL.Path)
 		if clean != "/" && s.web != nil {
-			rec := &statusRecorder{header: http.Header{}}
-			s.web.ServeHTTP(rec, r)
-			if rec.status != http.StatusNotFound {
-				for k, vs := range rec.header {
-					for _, v := range vs {
-						w.Header().Add(k, v)
-					}
-				}
+			// 先 stat 判断文件是否存在，存在就直接交给 FileServer。
+			// 之前是先用缓冲 ResponseWriter 接住整个文件再写回，等于每个静态请求
+			// 都多一次全量内存拷贝，也失去了 sendfile。
+			if st, err := fs.Stat(s.webFS, strings.TrimPrefix(clean, "/")); err == nil && !st.IsDir() {
 				// assets 下的文件名带内容哈希，可以放心长缓存；其它静态文件一周
 				if strings.HasPrefix(clean, "/assets/") {
 					w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 				} else {
 					w.Header().Set("Cache-Control", "public, max-age=604800")
 				}
-				w.WriteHeader(rec.status)
-				_, _ = w.Write(rec.body)
+				s.web.ServeHTTP(w, r)
+				return
+			}
+			// 带哈希的静态资源找不到就是真没了，不要回退成 index.html
+			if strings.HasPrefix(clean, "/assets/") {
+				fail(w, http.StatusNotFound, "资源不存在")
 				return
 			}
 		}
@@ -419,22 +508,6 @@ var (
 	indexETagOnce  sync.Once
 	indexETagCache string
 )
-
-type statusRecorder struct {
-	header http.Header
-	status int
-	body   []byte
-}
-
-func (r *statusRecorder) Header() http.Header { return r.header }
-func (r *statusRecorder) WriteHeader(c int)   { r.status = c }
-func (r *statusRecorder) Write(b []byte) (int, error) {
-	if r.status == 0 {
-		r.status = http.StatusOK
-	}
-	r.body = append(r.body, b...)
-	return len(b), nil
-}
 
 // ---------- 杂项 ----------
 

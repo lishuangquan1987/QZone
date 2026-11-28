@@ -65,6 +65,12 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 注册要过 bcrypt（约 70ms CPU），不限速就是一个廉价的 CPU 放大攻击
+	if !registerLimiter.allow(s.clientIP(r), 10, time.Hour) {
+		fail(w, http.StatusTooManyRequests, "注册过于频繁，请稍后再试")
+		return
+	}
+
 	ctx := r.Context()
 	exist, err := s.db.User.Query().Where(user.Uin(uin)).Exist(ctx)
 	if err != nil {
@@ -124,7 +130,13 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	uin := strings.TrimSpace(req.UIN)
-	limitKey := clientIP(r) + "|" + strings.ToLower(uin)
+	ip := s.clientIP(r)
+	// 先按 IP 总量兜一层：换着空间号刷也不会放大成无限次尝试
+	if !loginIPLimiter.allow(ip, 30, 5*time.Minute) {
+		fail(w, http.StatusTooManyRequests, "尝试次数过多，请 5 分钟后再试")
+		return
+	}
+	limitKey := ip + "|" + strings.ToLower(uin)
 	if !loginLimiter.allow(limitKey, 8, 5*time.Minute) {
 		fail(w, http.StatusTooManyRequests, "尝试次数过多，请 5 分钟后再试")
 		return
@@ -174,6 +186,7 @@ func (s *Server) sessionInfo(w http.ResponseWriter, r *http.Request) {
 		"authenticated": true,
 		"user":          view,
 		"unread":        unreadCount(ctx, s.db, u.ID),
+		"themes":        themeList(),
 	})
 }
 

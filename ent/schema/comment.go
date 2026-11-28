@@ -6,6 +6,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
+	"entgo.io/ent/schema/index"
 )
 
 type Comment struct{ ent.Schema }
@@ -18,6 +19,10 @@ func (Comment) Fields() []ent.Field {
 		field.String("reply_to").Default("").Comment("被回复者昵称，冗余存储便于渲染"),
 		field.Time("created_at").Default(time.Now),
 	}
+}
+
+func (Comment) Indexes() []ent.Index {
+	return []ent.Index{index.Fields("post_id")}
 }
 
 func (Comment) Edges() []ent.Edge {

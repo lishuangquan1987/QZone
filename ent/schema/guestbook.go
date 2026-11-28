@@ -6,6 +6,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
+	"entgo.io/ent/schema/index"
 )
 
 type Guestbook struct{ ent.Schema }
@@ -18,6 +19,10 @@ func (Guestbook) Fields() []ent.Field {
 		field.String("reply").Default(""),
 		field.Time("created_at").Default(time.Now),
 	}
+}
+
+func (Guestbook) Indexes() []ent.Index {
+	return []ent.Index{index.Fields("owner_id")}
 }
 
 func (Guestbook) Edges() []ent.Edge {

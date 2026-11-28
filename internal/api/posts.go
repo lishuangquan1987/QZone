@@ -102,18 +102,8 @@ func (s *Server) createPost(w http.ResponseWriter, r *http.Request, me *ent.User
 		fail(w, http.StatusBadRequest, "请求格式有误")
 		return
 	}
-	req.Content = strings.TrimSpace(req.Content)
-	req.Title = strings.TrimSpace(req.Title)
-	if req.Content == "" && len(req.Images) == 0 {
-		fail(w, http.StatusBadRequest, "写点什么再发布吧")
-		return
-	}
-	if len([]rune(req.Content)) > 60000 {
-		fail(w, http.StatusBadRequest, "正文过长（上限 6 万字）")
-		return
-	}
-	if len(req.Images) > 9 {
-		fail(w, http.StatusBadRequest, "最多 9 张图片")
+	if err := normalizePost(&req); err != nil {
+		fail(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	vis := req.Visibility
@@ -143,6 +133,7 @@ func (s *Server) createPost(w http.ResponseWriter, r *http.Request, me *ent.User
 		writeErr(w, err)
 		return
 	}
+	p.Edges.Author = me
 	views, err := s.postViews(r.Context(), []*ent.Post{p}, me.ID, true)
 	if err != nil {
 		writeErr(w, err)
@@ -167,11 +158,12 @@ func (s *Server) getPost(w http.ResponseWriter, r *http.Request, me *ent.User) {
 		fail(w, http.StatusForbidden, "这篇内容仅作者本人可见")
 		return
 	}
-	// 浏览量 +1（作者自己看不计）
+	// 浏览量：作者自己看不计，同 IP 30 分钟内只算一次，攒在内存里定时落库
 	if p.Edges.Author.ID != me.ID {
-		_, _ = s.db.Post.UpdateOneID(p.ID).AddViews(1).Save(ctx)
-		p.Views++
+		s.views.hit(p.ID, s.clientIP(r))
 	}
+	// 未落库的增量对所有人都可见，否则作者自己要等 20 秒才看到数字变化
+	p.Views += s.views.pendingFor(p.ID)
 	views, err := s.postViews(ctx, []*ent.Post{p}, me.ID, true)
 	if err != nil {
 		writeErr(w, err)
@@ -200,6 +192,11 @@ func (s *Server) updatePost(w http.ResponseWriter, r *http.Request, me *ent.User
 	var req postReq
 	if err := decode(r, &req); err != nil {
 		fail(w, http.StatusBadRequest, "请求格式有误")
+		return
+	}
+	// 和新建走同一套校验，否则 PATCH 能绕过字数与配图上限
+	if err := normalizePost(&req); err != nil {
+		fail(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	upd := s.db.Post.UpdateOneID(id)
@@ -396,6 +393,16 @@ func (s *Server) deleteComment(w http.ResponseWriter, r *http.Request, me *ent.U
 
 // ---------- 视图组装 ----------
 
+const (
+	// 详情页最多回传的点赞头像与评论条数：再多前端也不展示，只会把响应撑大
+	likeDetailLimit  = 24
+	commentDetailMax = 200
+)
+
+// postViews 把文章行组装成视图。
+//
+// 列表页（withContent=false）只回传计数，不拉评论正文与点赞明细：
+// 之前 8 篇文章会把全部评论内容查出来，只为数一下条数。
 func (s *Server) postViews(ctx context.Context, rows []*ent.Post, viewerID int, withContent bool) ([]postView, error) {
 	if len(rows) == 0 {
 		return []postView{}, nil
@@ -405,65 +412,136 @@ func (s *Server) postViews(ctx context.Context, rows []*ent.Post, viewerID int, 
 		ids = append(ids, p.ID)
 	}
 
-	likes, err := s.db.PostLike.Query().
+	// 点赞总数：一次 GROUP BY 拿全
+	var likeAgg []struct {
+		PostID int `json:"post_id"`
+		Count  int `json:"count"`
+	}
+	if err := s.db.PostLike.Query().
 		Where(postlike.HasPostWith(post.IDIn(ids...))).
-		WithUser().WithPost().
-		Order(ent.Asc(postlike.FieldCreatedAt)).
-		All(ctx)
-	if err != nil {
+		GroupBy(postlike.FieldPostID).
+		Aggregate(ent.Count()).
+		Scan(ctx, &likeAgg); err != nil {
 		return nil, err
 	}
+	likeCount := make(map[int]int, len(likeAgg))
+	for _, r := range likeAgg {
+		likeCount[r.PostID] = r.Count
+	}
+
+	// 当前用户赞过哪些：只取一列
+	var mine []struct {
+		PostID int `json:"post_id"`
+	}
+	if err := s.db.PostLike.Query().
+		Where(postlike.HasPostWith(post.IDIn(ids...)), postlike.HasUserWith(user.ID(viewerID))).
+		Select(postlike.FieldPostID).
+		Scan(ctx, &mine); err != nil {
+		return nil, err
+	}
+	likedSet := make(map[int]bool, len(mine))
+	for _, m := range mine {
+		likedSet[m.PostID] = true
+	}
+
 	likeMap := map[int][]brief{}
-	likedSet := map[int]bool{}
-	for _, l := range likes {
-		if l.Edges.Post == nil || l.Edges.User == nil {
-			continue
+	cmtMap := map[int][]commentView{}
+	cmtCount := map[int]int{}
+
+	// 评论总数：两种情况都要，用聚合比 len(明细) 更准（明细有条数上限）
+	var cmtAgg []struct {
+		PostID int `json:"post_id"`
+		Count  int `json:"count"`
+	}
+	if err := s.db.Comment.Query().
+		Where(comment.HasPostWith(post.IDIn(ids...))).
+		GroupBy(comment.FieldPostID).
+		Aggregate(ent.Count()).
+		Scan(ctx, &cmtAgg); err != nil {
+		return nil, err
+	}
+	for _, r := range cmtAgg {
+		cmtCount[r.PostID] = r.Count
+	}
+
+	if withContent {
+		likes, err := s.db.PostLike.Query().
+			Where(postlike.HasPostWith(post.IDIn(ids...))).
+			WithUser().WithPost().
+			Order(ent.Asc(postlike.FieldCreatedAt)).
+			Limit(likeDetailLimit).
+			All(ctx)
+		if err != nil {
+			return nil, err
 		}
-		pid := l.Edges.Post.ID
-		likeMap[pid] = append(likeMap[pid], toBrief(l.Edges.User))
-		if l.Edges.User.ID == viewerID {
-			likedSet[pid] = true
+		for _, l := range likes {
+			if l.Edges.Post == nil || l.Edges.User == nil {
+				continue
+			}
+			likeMap[l.Edges.Post.ID] = append(likeMap[l.Edges.Post.ID], toBrief(l.Edges.User))
+		}
+
+		cms, err := s.db.Comment.Query().
+			Where(comment.HasPostWith(post.IDIn(ids...))).
+			WithAuthor().WithPost().
+			Order(ent.Asc(comment.FieldCreatedAt)).
+			Limit(commentDetailMax).
+			All(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, c := range cms {
+			if c.Edges.Post == nil {
+				continue
+			}
+			pid := c.Edges.Post.ID
+			cmtMap[pid] = append(cmtMap[pid], commentView{
+				ID: c.ID, Content: c.Content, At: timeStr(c.CreatedAt),
+				Author: toBrief(c.Edges.Author), ReplyTo: c.ReplyTo,
+				CanDel: c.AuthorID == viewerID,
+			})
 		}
 	}
 
-	cms, err := s.db.Comment.Query().
-		Where(comment.HasPostWith(post.IDIn(ids...))).
-		WithAuthor().WithPost().
-		Order(ent.Asc(comment.FieldCreatedAt)).
-		All(ctx)
-	if err != nil {
-		return nil, err
-	}
-	cmtMap := map[int][]commentView{}
-	for _, c := range cms {
-		if c.Edges.Post == nil {
-			continue
+	// 作者缺失时批量补齐，避免逐篇查一次
+	var missing []int
+	for _, p := range rows {
+		if p.Edges.Author == nil {
+			missing = append(missing, p.AuthorID)
 		}
-		pid := c.Edges.Post.ID
-		cmtMap[pid] = append(cmtMap[pid], commentView{
-			ID: c.ID, Content: c.Content, At: timeStr(c.CreatedAt),
-			Author: toBrief(c.Edges.Author), ReplyTo: c.ReplyTo,
-			CanDel: c.AuthorID == viewerID,
-		})
+	}
+	authors := make(map[int]*ent.User, len(missing))
+	if len(missing) > 0 {
+		us, err := s.db.User.Query().Where(user.IDIn(missing...)).All(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, u := range us {
+			authors[u.ID] = u
+		}
 	}
 
 	out := make([]postView, 0, len(rows))
 	for _, p := range rows {
 		author := p.Edges.Author
 		if author == nil {
-			if u, err := s.db.User.Query().Where(user.ID(p.AuthorID)).Only(ctx); err == nil {
-				author = u
-			}
+			author = authors[p.AuthorID]
 		}
-		// 评论删除权限：评论作者或文章作者
+
 		comments := cmtMap[p.ID]
 		if comments == nil {
 			comments = []commentView{}
 		}
-		for i := range comments {
-			if comments[i].CanDel || (author != nil && author.ID == viewerID) {
+		// 评论删除权限：评论作者或文章作者
+		if author != nil && author.ID == viewerID {
+			for i := range comments {
 				comments[i].CanDel = true
 			}
+		}
+
+		likes := likeMap[p.ID]
+		if likes == nil {
+			likes = []brief{}
 		}
 
 		pv := postView{
@@ -471,17 +549,14 @@ func (s *Server) postViews(ctx context.Context, rows []*ent.Post, viewerID int, 
 			Category: p.Category, Images: p.Images, Visibility: p.Visibility,
 			Pinned: p.Pinned, Views: p.Views, At: timeStr(p.CreatedAt),
 			UpdatedAt: timeStr(p.UpdatedAt), Author: toBrief(author),
-			Likes: likeMap[p.ID], Liked: likedSet[p.ID],
-			LikeCount:   len(likeMap[p.ID]),
-			CommentNum:  len(comments),
+			Likes: likes, Liked: likedSet[p.ID],
+			LikeCount:   likeCount[p.ID],
+			CommentNum:  cmtCount[p.ID],
 			CanEdit:     author != nil && author.ID == viewerID,
 			ReadingTime: readingTime(p.Content),
 		}
 		if pv.Images == nil {
 			pv.Images = []string{}
-		}
-		if pv.Likes == nil {
-			pv.Likes = []brief{}
 		}
 		if withContent {
 			pv.Content = p.Content

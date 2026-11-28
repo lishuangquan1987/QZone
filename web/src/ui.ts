@@ -1,5 +1,16 @@
 /** 通用 UI 工具：转义、时间、图标、弹层、提示、看图。 */
 
+/**
+ * 站内图片的缩略图地址。
+ * 相册一屏 20 张 3MB 原图就是几十 MB，列表一律走 ?w= 让服务端缩放并缓存。
+ * 非站内地址（外链、dataURL）原样返回。
+ */
+export function thumb(url: string, width = 480): string {
+  if (!url || !url.startsWith('/media/')) return url;
+  if (url.includes('?w=')) return url;
+  return `${url}${url.includes('?') ? '&' : '?'}w=${width}`;
+}
+
 export function esc(s: string): string {
   return s
     .replace(/&/g, '&amp;')

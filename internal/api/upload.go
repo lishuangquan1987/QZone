@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -54,7 +55,21 @@ func (s *Server) saveUpload(r *http.Request, me *ent.User, field string, limit i
 	}
 	defer dst.Close()
 
-	n, err := io.Copy(dst, io.LimitReader(file, limit+1))
+	// 读文件头做内容嗅探：扩展名和 Content-Type 都不可信
+	head := make([]byte, 512)
+	hn, herr := io.ReadFull(file, head)
+	if herr != nil && herr != io.ErrUnexpectedEOF && herr != io.EOF {
+		_ = os.Remove(abs)
+		return "", herr
+	}
+	head = head[:hn]
+	if !media.ContentMatches(ext, head, audio) {
+		_ = os.Remove(abs)
+		return "", errors.New("文件内容与格式不符，请换一个文件")
+	}
+
+	src := io.MultiReader(bytes.NewReader(head), file)
+	n, err := io.Copy(dst, io.LimitReader(src, limit+1))
 	if err != nil {
 		_ = os.Remove(abs)
 		return "", err

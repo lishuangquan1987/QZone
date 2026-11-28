@@ -31,6 +31,13 @@ var (
 				OnDelete:   schema.NoAction,
 			},
 		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "album_owner_id",
+				Unique:  false,
+				Columns: []*schema.Column{AlbumsColumns[6]},
+			},
+		},
 	}
 	// CommentsColumns holds the columns for the "comments" table.
 	CommentsColumns = []*schema.Column{
@@ -60,6 +67,13 @@ var (
 				OnDelete:   schema.NoAction,
 			},
 		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "comment_post_id",
+				Unique:  false,
+				Columns: []*schema.Column{CommentsColumns[4]},
+			},
+		},
 	}
 	// GuestbooksColumns holds the columns for the "guestbooks" table.
 	GuestbooksColumns = []*schema.Column{
@@ -87,6 +101,13 @@ var (
 				Columns:    []*schema.Column{GuestbooksColumns[5]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "guestbook_owner_id",
+				Unique:  false,
+				Columns: []*schema.Column{GuestbooksColumns[4]},
 			},
 		},
 	}
@@ -120,6 +141,18 @@ var (
 				OnDelete:   schema.NoAction,
 			},
 		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "notification_to_id_read",
+				Unique:  false,
+				Columns: []*schema.Column{NotificationsColumns[6], NotificationsColumns[4]},
+			},
+			{
+				Name:    "notification_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{NotificationsColumns[5]},
+			},
+		},
 	}
 	// PhotosColumns holds the columns for the "photos" table.
 	PhotosColumns = []*schema.Column{
@@ -143,6 +176,18 @@ var (
 				Columns:    []*schema.Column{PhotosColumns[7]},
 				RefColumns: []*schema.Column{AlbumsColumns[0]},
 				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "photo_album_id",
+				Unique:  false,
+				Columns: []*schema.Column{PhotosColumns[7]},
+			},
+			{
+				Name:    "photo_url",
+				Unique:  false,
+				Columns: []*schema.Column{PhotosColumns[1]},
 			},
 		},
 	}
@@ -220,6 +265,16 @@ var (
 				Unique:  false,
 				Columns: []*schema.Column{PostsColumns[5]},
 			},
+			{
+				Name:    "post_author_id_visibility_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{PostsColumns[12], PostsColumns[7], PostsColumns[10]},
+			},
+			{
+				Name:    "post_visibility",
+				Unique:  false,
+				Columns: []*schema.Column{PostsColumns[7]},
+			},
 		},
 	}
 	// PostLikesColumns holds the columns for the "post_likes" table.
@@ -275,6 +330,13 @@ var (
 				Columns:    []*schema.Column{SessionsColumns[4]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "session_expires_at",
+				Unique:  false,
+				Columns: []*schema.Column{SessionsColumns[2]},
 			},
 		},
 	}
@@ -343,6 +405,21 @@ var (
 				Name:    "visit_created_at",
 				Unique:  false,
 				Columns: []*schema.Column{VisitsColumns[2]},
+			},
+			{
+				Name:    "visit_host_id",
+				Unique:  false,
+				Columns: []*schema.Column{VisitsColumns[3]},
+			},
+			{
+				Name:    "visit_visitor_id",
+				Unique:  false,
+				Columns: []*schema.Column{VisitsColumns[4]},
+			},
+			{
+				Name:    "visit_host_id_visitor_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{VisitsColumns[3], VisitsColumns[4], VisitsColumns[2]},
 			},
 		},
 	}

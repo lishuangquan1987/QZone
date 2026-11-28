@@ -740,7 +740,7 @@ export async function demoRequest(path: string, init: RequestInit = {}): Promise
     }
     if (r[1] === 'session') {
       if (!me) return ok({ authenticated: false });
-      return ok({ authenticated: true, user: userView(me, me), unread: unreadOf(me) });
+      return ok({ authenticated: true, user: userView(me, me), unread: unreadOf(me), themes: THEMES });
     }
   }
 

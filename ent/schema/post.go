@@ -41,5 +41,8 @@ func (Post) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("created_at"),
 		index.Fields("category"),
+		// 列表页固定按「作者 + 可见性 + 时间」过滤，走这条组合索引
+		index.Fields("author_id", "visibility", "created_at"),
+		index.Fields("visibility"),
 	}
 }

@@ -69,11 +69,25 @@ func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request, me *ent.U
 	if p.City != nil {
 		upd.SetCity(clip(*p.City, 20))
 	}
-	if p.Avatar != nil && *p.Avatar != "" {
-		upd.SetAvatar(*p.Avatar)
+	if p.Avatar != nil {
+		v, ok := safeAssetURL(*p.Avatar, false)
+		if !ok {
+			fail(w, http.StatusBadRequest, "头像地址不合法")
+			return
+		}
+		if v != "" {
+			upd.SetAvatar(v)
+		}
 	}
-	if p.Cover != nil && *p.Cover != "" {
-		upd.SetCover(*p.Cover)
+	if p.Cover != nil {
+		v, ok := safeAssetURL(*p.Cover, false)
+		if !ok {
+			fail(w, http.StatusBadRequest, "封面地址不合法")
+			return
+		}
+		if v != "" {
+			upd.SetCover(v)
+		}
 	}
 	if p.Theme != nil {
 		upd.SetTheme(*p.Theme)
@@ -82,7 +96,12 @@ func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request, me *ent.U
 		upd.SetBgmTitle(clip(*p.BgmTitle, 60))
 	}
 	if p.BgmURL != nil {
-		upd.SetBgmURL(*p.BgmURL)
+		v, ok := safeAssetURL(*p.BgmURL, true)
+		if !ok {
+			fail(w, http.StatusBadRequest, "背景音乐地址不合法")
+			return
+		}
+		upd.SetBgmURL(v)
 	}
 	if p.Tags != nil && len(*p.Tags) <= 8 {
 		upd.SetTags(*p.Tags)
@@ -103,8 +122,9 @@ func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request, me *ent.U
 // signIn 每日签到。
 func (s *Server) signIn(w http.ResponseWriter, r *http.Request, me *ent.User) {
 	ctx := r.Context()
-	today := time.Now().Format("2006-01-02")
-	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+	now := time.Now()
+	today := dayKey(now)
+	yesterday := dayKey(now.AddDate(0, 0, -1))
 
 	if me.LastSignIn == today {
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -161,7 +181,7 @@ func (s *Server) visitors(w http.ResponseWriter, r *http.Request, me *ent.User) 
 		return
 	}
 
-	start := time.Now().Truncate(24 * time.Hour)
+	start := startOfDay(time.Now())
 	out := make([]visitorView, 0, len(rows))
 	today := 0
 	for _, v := range rows {
@@ -197,6 +217,21 @@ func (s *Server) recordVisit(w http.ResponseWriter, r *http.Request, me *ent.Use
 		return
 	}
 	if host.ID == me.ID {
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+		return
+	}
+	// 同一访客 30 分钟内重复进页面（刷新、来回切换）不重复计数，也不重复发消息
+	recent, err := s.db.Visit.Query().
+		Where(
+			visit.HasHostWith(user.ID(host.ID)),
+			visit.HasVisitorWith(user.ID(me.ID)),
+			visit.CreatedAtGTE(time.Now().Add(-30*time.Minute)),
+		).Exist(ctx)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if recent {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 		return
 	}
@@ -239,14 +274,19 @@ func (s *Server) bootstrap(w http.ResponseWriter, r *http.Request, me *ent.User)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"me":     view,
 		"unread": unreadCount(ctx, s.db, me.ID),
-		"themes": []map[string]string{
-			{"id": "aurora", "name": "松墨", "accent": "#2f5d50"},
-			{"id": "ember", "name": "陶土", "accent": "#9a4a33"},
-			{"id": "forest", "name": "靛青", "accent": "#3a4a63"},
-			{"id": "ink", "name": "墨黑", "accent": "#33302b"},
-			{"id": "sakura", "name": "绛粉", "accent": "#9c5468"},
-		},
+		"themes": themeList(),
 	})
+}
+
+// themeList 是可选强调色。首屏和会话探测都会带上，避免客户端连发两次请求。
+func themeList() []map[string]string {
+	return []map[string]string{
+		{"id": "aurora", "name": "松墨", "accent": "#2f5d50"},
+		{"id": "ember", "name": "陶土", "accent": "#9a4a33"},
+		{"id": "forest", "name": "靛青", "accent": "#3a4a63"},
+		{"id": "ink", "name": "墨黑", "accent": "#33302b"},
+		{"id": "sakura", "name": "绛粉", "accent": "#9c5468"},
+	}
 }
 
 // ---------- 统计 ----------
@@ -278,7 +318,7 @@ func (s *Server) statsFor(ctx context.Context, u *ent.User, viewerID int) (posts
 	if err != nil {
 		return
 	}
-	start := time.Now().Truncate(24 * time.Hour)
+	start := startOfDay(time.Now())
 	today, err = s.db.Visit.Query().
 		Where(visit.HasHostWith(user.ID(u.ID)), visit.CreatedAtGTE(start)).Count(ctx)
 	return

@@ -6,6 +6,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
+	"entgo.io/ent/schema/index"
 )
 
 type Album struct{ ent.Schema }
@@ -19,6 +20,10 @@ func (Album) Fields() []ent.Field {
 		field.String("privacy").Default("public"),
 		field.Time("created_at").Default(time.Now),
 	}
+}
+
+func (Album) Indexes() []ent.Index {
+	return []ent.Index{index.Fields("owner_id")}
 }
 
 func (Album) Edges() []ent.Edge {

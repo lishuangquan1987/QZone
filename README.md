@@ -34,7 +34,22 @@ cd web && npm install && npm run build && cd ..
 go build -o qzone.exe .
 ./qzone.exe -addr :8080                 # 默认图片 30MB / 音频 50MB
 ./qzone.exe -addr :8080 -max-image 50 -max-audio 100
+
+# 前面有 Nginx / Caddy 时打开，才会采信 X-Forwarded-For（否则限速可被伪造）
+./qzone.exe -addr :8080 -trust-proxy
+
+# 热备份：VACUUM INTO 生成一致快照，可直接拷走
+./qzone.exe -data ./data -backup-to ./backup-20261128.db
 ```
+
+| 参数 | 默认 | 说明 |
+| --- | --- | --- |
+| `-addr` | `:8080` | 监听地址 |
+| `-data` | `data` | 数据库与上传目录 |
+| `-max-image` | 30 | 单张图片上限（MB） |
+| `-max-audio` | 50 | 单段音频上限（MB） |
+| `-trust-proxy` | false | 采信 `X-Forwarded-For`，仅在可信反代后面打开 |
+| `-backup-to` | 空 | 备份到指定文件后退出 |
 
 打开 <http://localhost:8080>。
 
@@ -146,6 +161,9 @@ docker run -d -p 8080:8080 -v $PWD/data:/data ghcr.io/lishuangquan1987/qzone:lat
 | 长列表 | 文章行 / 消息行 `content-visibility: auto` + 估算高度 | 视口外不参与排版绘制 |
 | 图片 | 统一 `loading="lazy"` + `decoding="async"`，照片带 `width/height` 预留位 | 不阻塞首帧、无布局抖动 |
 | 数据复用 | `web/src/api.ts` 的 GET 结果 15 秒内存缓存，任何写操作整体失效 | 站内来回切换 30ms 左右 |
+| 索引 | 外键与高频过滤条件全部建索引（`photos(url)`、`posts(author_id,visibility,created_at)`、`notifications(to_id,read)` 等） | 5000 篇文章 / 2 万张照片：相册接口单次 54ms → **3.6ms**，并发 10 的 p95 603ms → **37ms** |
+| 缩略图 | `GET /media/...?w=480` 服务端缩放成 JPEG 并落盘缓存（`.thumb/<宽>/`），列表一律用缩略图、灯箱才取原图 | 1.85MB 原图 → 69KB，相册一屏省几十 MB |
+| 写放大 | 浏览量攒在内存里 20 秒批量落库，同 IP 30 分钟去重 | 详情页 GET 不再每次都写库，避免热门文章把写锁占满 |
 | 感知速度 | 路由超过 150ms 才显示顶部进度条；写作页离开补存草稿 | 慢请求有反馈，不闪一下 |
 | 事件回收 | 视图级 `AbortController`，路由切换统一 abort | 反复进出首页不再叠加监听器 |
 
@@ -281,6 +299,8 @@ User ─┬─< Post ─< Comment
 | POST | `/api/upload/audio` | 音频上传（默认 ≤50MB） |
 | GET | `/api/music/library` | 在线华语曲库 + 内置合成曲目（含分组、封面） |
 | GET | `/api/music/stream?mid=` | 曲库音源：服务端换 vkey 后同源转发（支持 Range）；`?u=` 兼容旧版白名单直链 |
+| GET | `/healthz` | 探活：数据库可读返回 200 |
+| GET | `/media/<路径>?w=480` | 缩略图，宽度只接受 240 / 400 / 480 / 800；不支持的类型回退原图 |
 
 ---
 
@@ -304,13 +324,13 @@ node tools/e2e.cjs
 
 ## 已知边界
 
-> 完整的评审与待办见 [REVIEW.md](REVIEW.md)。曾经的 P0「`/media/` 目录绕过权限」与「SVG 上传 XSS」已修，剩余项以 P1/P2 为主。
+> 完整的评审与待办见 [REVIEW.md](REVIEW.md)。P0/P1 已全部处理：索引、查询 N+1、`/media/` 越权、SVG XSS、伪造上传、限速绕过、时区日界、浏览量写放大都已修，剩余为 P2 产品向项。
 
-- SQLite 单写者：连接池限制为 1，适合单机；多实例部署需换 PostgreSQL（ent 支持，改驱动即可）。
+- SQLite 单写者：连接池限制为 1，适合单机；多实例部署需换 PostgreSQL（ent 支持，改驱动即可）。CPU 密集的查询已经通过索引与批量聚合压下去了，但同一时刻仍只有一个写事务。
 - 没有实时推送，消息需刷新页面获取。
 - 没有富文本粘贴（粘贴的是图片，不是 Word/网页样式）、没有多端实时协作。
 - 草稿只存在浏览器 localStorage，换设备不同步。
-- 图片上传前会在浏览器端压到 WebP，但没有服务端缩略图；大量高清图时建议接对象存储 + 图片处理。
-- 删除文章 / 相册只删数据库记录，磁盘上的原图不会自动清理。
+- 缩略图在首次访问时同步生成（同一张图只生成一次，之后直接读文件）；超大图（>12000px）会跳过缩略图回退原图。图片量很大时仍建议接对象存储 + CDN。
+- 删除文章 / 相册只删数据库记录，磁盘上的原图不会自动清理——同一张图可能被多篇文章引用，需要先做引用计数表，见 REVIEW.md。
 - 示例素材（头像 / 封面 / 照片）是程序生成的渐变 SVG，仅用于演示。
 - 在线曲库依赖 QQ 音乐试听接口的可用性：接口若调整或歌曲下架，会返回「暂时无法试听」，换一首或退回内置曲目即可；`vkey` 缓存 25 分钟，失败会自动清缓存重试。对外站点请改用自有授权音源，个人非商业试听也请遵守平台条款。
